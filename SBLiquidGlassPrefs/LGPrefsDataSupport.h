@@ -74,12 +74,6 @@ NSArray<NSDictionary *> *LGGlobalColorTuningItems(void);    // 玻璃效果 · �
 NSArray<NSDictionary *> *LGAppearanceSettingsItems(void);   // 设置 · 外观设置
 NSArray<NSDictionary *> *LGPerformanceSettingsItems(void);  // 设置 · 性能与优化
 NSArray<NSDictionary *> *LGDataSettingsItems(void);         // 设置 · 数据与备份
-// ---- V1.1.0 new features (from Liquidify research) ----
-NSArray<NSDictionary *> *LGDynamicIslandSettingsItems(void);   // 玻璃效果 · 灵动岛
-NSArray<NSDictionary *> *LGLockScreenTimeSettingsItems(void);  // 玻璃效果 · 锁屏时间
-NSArray<NSDictionary *> *LGKeyboardExtrasSettingsItems(void);  // 玻璃效果 · 键盘增强
-NSArray<NSDictionary *> *LGFolderIconExtrasSettingsItems(void);// 玻璃效果 · 文件夹图标
-NSArray<NSDictionary *> *LGPerAppExclusionSettingsItems(void); // 设置 · 按应用禁用
 NSArray<NSString *> *LGGlobalGlassResetKeys(void);          // 仅全局玻璃相关键（用于重置）
 void LGApplyGlobalGlassDefaults(void);                      // 写入一组合理的全局玻璃默认值
 
