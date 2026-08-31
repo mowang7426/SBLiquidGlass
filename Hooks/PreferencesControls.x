@@ -72,7 +72,7 @@ static void LGUpdateSBLiquidGlassEntryFooter(UITableViewCell *cell) {
     }
     if (!footer) {
         footer = [[UILabel alloc] initWithFrame:CGRectZero];
-        footer.text = @"dylv";
+        footer.text = @"";
         footer.font = [UIFont systemFontOfSize:10.0 weight:UIFontWeightRegular];
         footer.textColor = UIColor.tertiaryLabelColor;
         footer.textAlignment = NSTextAlignmentRight;
