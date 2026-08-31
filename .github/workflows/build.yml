@@ -1,93 +1,101 @@
-name: Build SBLiquidGlass V1.0.0 Alpha 1
+name: Build
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
+    name: Build tweak
     runs-on: macos-14
 
     steps:
-      # ==========================================
-      # 1. Checkout
-      # ==========================================
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ==========================================
-      # 2. Install build tools
-      # ==========================================
       - name: Install dependencies
         run: |
+          set -e
           brew update
-          brew install make dpkg ldid xz
+          brew install ldid
 
-      # ==========================================
-      # 3. Install RootHide Theos
-      # ==========================================
       - name: Install RootHide Theos
         run: |
-          git clone --depth=1 https://github.com/roothide/theos.git $HOME/theos
+          set -e
+          export THEOS="$GITHUB_WORKSPACE/theos"
+          echo "THEOS=$THEOS" >> "$GITHUB_ENV"
 
-      # ==========================================
-      # 4. Download iPhoneOS SDK
-      # ==========================================
+          rm -rf "$THEOS"
+          git clone --recursive --depth=1 https://github.com/roothide/theos.git "$THEOS"
+
+          # Make sure the required Theos toolchain is present.
+          "$THEOS/bin/update-theos"
+
       - name: Install iPhoneOS SDK
         run: |
-          mkdir -p $HOME/theos/sdks
+          set -e
 
-          curl -L \
-            -o /tmp/iPhoneOS16.5.sdk.tar.xz \
-            https://github.com/roothide/theos/releases/download/sdk/iPhoneOS16.5.sdk.tar.xz
+          export THEOS="$GITHUB_WORKSPACE/theos"
+          SDK_VERSION="17.0"
+          SDK_NAME="iPhoneOS${SDK_VERSION}.sdk"
+          SDK_REPO="https://github.com/xybp888/iOS-SDKs.git"
 
-          tar -xJf \
-            /tmp/iPhoneOS16.5.sdk.tar.xz \
-            -C $HOME/theos/sdks
+          mkdir -p "$THEOS/sdks"
 
-      # ==========================================
-      # 5. Configure Theos
-      # ==========================================
-      - name: Configure Theos
-        run: |
-          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
-          echo "THEOS_PACKAGE_SCHEME=roothide" >> $GITHUB_ENV
+          rm -rf "$RUNNER_TEMP/iOS-SDKs"
+          git clone             --filter=blob:none             --no-checkout             --depth=1             "$SDK_REPO"             "$RUNNER_TEMP/iOS-SDKs"
 
-      # ==========================================
-      # 6. Show environment
-      # ==========================================
+          cd "$RUNNER_TEMP/iOS-SDKs"
+          git sparse-checkout init --cone
+          git sparse-checkout set "$SDK_NAME"
+          git checkout
+
+          test -d "$SDK_NAME"
+          cp -R "$SDK_NAME" "$THEOS/sdks/"
+
+          echo "Installed SDK:"
+          ls -ld "$THEOS/sdks/$SDK_NAME"
+
       - name: Check build environment
         run: |
+          set -e
+          export THEOS="$GITHUB_WORKSPACE/theos"
+
           echo "THEOS=$THEOS"
-          echo "THEOS_PACKAGE_SCHEME=$THEOS_PACKAGE_SCHEME"
-          ls -la "$THEOS/sdks"
+          echo "Available SDKs:"
+          find "$THEOS/sdks" -maxdepth 1 -type d -name "*.sdk" -print
+
+          echo "Xcode:"
           xcodebuild -version
 
-      # ==========================================
-      # 7. Build package
-      # ==========================================
-      - name: Build SBLiquidGlass
+          echo "Clang:"
+          xcrun --sdk iphoneos clang --version
+
+      - name: Build RootHide package
         run: |
+          set -e
+          export THEOS="$GITHUB_WORKSPACE/theos"
+
           make clean
-          make package \
-            THEOS="$THEOS" \
-            THEOS_PACKAGE_SCHEME=roothide \
-            FINALPACKAGE=1
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide
 
-      # ==========================================
-      # 8. Show generated packages
-      # ==========================================
-      - name: List packages
+      - name: Build Rootless package
         run: |
-          echo "========== Packages =========="
-          find packages -maxdepth 1 -type f -print
-          echo "=============================="
+          set -e
+          export THEOS="$GITHUB_WORKSPACE/theos"
 
-      # ==========================================
-      # 9. Upload DEB
-      # ==========================================
-      - name: Upload DEB
+          make clean
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+
+      - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
-          name: SBLiquidGlass-V1.0.0-Alpha1
+          name: tweak-packages
           path: packages/*.deb
           if-no-files-found: error
