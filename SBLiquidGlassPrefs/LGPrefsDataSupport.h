@@ -67,6 +67,16 @@ NSArray<NSDictionary *> *LGAllSurfaceItems(void);
 NSArray<NSDictionary *> *LGPrefsSettingsItems(void);
 NSArray<NSDictionary *> *LGMoreOptionsItems(void);
 
+// ---- V1.1.0 redesigned tabs ----
+NSArray<NSDictionary *> *LGOverviewToggleItems(void);       // 总览 · 系统界面快捷开关
+NSArray<NSDictionary *> *LGGlobalGlassTuningItems(void);    // 玻璃效果 · 全局玻璃参数
+NSArray<NSDictionary *> *LGGlobalColorTuningItems(void);    // 玻璃效果 · 颜色调节
+NSArray<NSDictionary *> *LGAppearanceSettingsItems(void);   // 设置 · 外观设置
+NSArray<NSDictionary *> *LGPerformanceSettingsItems(void);  // 设置 · 性能与优化
+NSArray<NSDictionary *> *LGDataSettingsItems(void);         // 设置 · 数据与备份
+NSArray<NSString *> *LGGlobalGlassResetKeys(void);          // 仅全局玻璃相关键（用于重置）
+void LGApplyGlobalGlassDefaults(void);                      // 写入一组合理的全局玻璃默认值
+
 NSString *LGExportPreferencesJSONString(void);
 BOOL LGImportPreferencesJSONString(NSString *jsonString, NSError **error);
 

@@ -220,14 +220,25 @@ void LGInstallScrollableStack(UIViewController *controller,
 }
 
 void LGInstallBottomRespringBar(UIViewController *controller, UIView *__strong *respringBarOut) {
+    LGInstallBottomRespringBarAboveView(controller, nil, respringBarOut);
+}
+void LGInstallBottomRespringBarAboveView(UIViewController *controller, UIView *aboveView, UIView *__strong *respringBarOut) {
     UIView *respringBar = LGMakeRespringBar(controller, @selector(handleRespringPressed), @selector(handleLaterPressed));
     [controller.view addSubview:respringBar];
     UILayoutGuide *guide = controller.view.safeAreaLayoutGuide;
-    [NSLayoutConstraint activateConstraints:@[
-        [respringBar.leadingAnchor constraintEqualToAnchor:guide.leadingAnchor constant:16.0],
-        [respringBar.trailingAnchor constraintEqualToAnchor:guide.trailingAnchor constant:-16.0],
-        [respringBar.bottomAnchor constraintEqualToAnchor:guide.bottomAnchor constant:-12.0],
-    ]];
+    if (aboveView) {
+        [NSLayoutConstraint activateConstraints:@[
+            [respringBar.leadingAnchor constraintEqualToAnchor:guide.leadingAnchor constant:16.0],
+            [respringBar.trailingAnchor constraintEqualToAnchor:guide.trailingAnchor constant:-16.0],
+            [respringBar.bottomAnchor constraintEqualToAnchor:aboveView.topAnchor constant:-12.0],
+        ]];
+    } else {
+        [NSLayoutConstraint activateConstraints:@[
+            [respringBar.leadingAnchor constraintEqualToAnchor:guide.leadingAnchor constant:16.0],
+            [respringBar.trailingAnchor constraintEqualToAnchor:guide.trailingAnchor constant:-16.0],
+            [respringBar.bottomAnchor constraintEqualToAnchor:guide.bottomAnchor constant:-12.0],
+        ]];
+    }
     if (respringBarOut) *respringBarOut = respringBar;
 }
 

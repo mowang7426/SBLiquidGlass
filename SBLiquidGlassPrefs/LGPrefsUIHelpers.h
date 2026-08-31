@@ -38,6 +38,7 @@ void LGInstallScrollableStack(UIViewController *controller,
                               UIScrollView *__strong *scrollViewOut,
                               UIStackView *__strong *stackViewOut);
 void LGInstallBottomRespringBar(UIViewController *controller, UIView *__strong *respringBarOut);
+void LGInstallBottomRespringBarAboveView(UIViewController *controller, UIView *aboveView, UIView *__strong *respringBarOut);
 void LGRefreshRespringBarGlass(UIView *respringBar);
 void LGScheduleRespringBarGlassRefresh(UIView *respringBar);
 void LGPresentSliderValuePrompt(UIViewController *controller, UILabel *valueLabel);

@@ -5,7 +5,7 @@ BUNDLE_NAME = SBLiquidGlassPrefs
 LG_PACKAGE_VERSION := $(shell sed -n 's/^Version: //p' ../control | head -n 1)
 
 PREF_LOCAL_FILES := LGPRootListController.m LGPSurfaceController.m LGPrefsSurfaceCatalog.m LGPrefsDataSupport.m \
-                    LGPrefsUIHelpers.m LGPrefsLiquidSlider.m LGPrefsLiquidSwitch.m
+                    LGPrefsUIHelpers.m LGPrefsLiquidSlider.m LGPrefsLiquidSwitch.m LGPrefsTabBar.m
 PREF_SHARED_FILES := ../Shared/LGSharedSupport.m ../Shared/LGLiveBackdropView.m
 SBLiquidGlassPrefs_FILES = $(PREF_LOCAL_FILES) $(PREF_SHARED_FILES)
 SBLiquidGlassPrefs_FRAMEWORKS = UIKit QuartzCore CoreText CoreGraphics CoreMotion

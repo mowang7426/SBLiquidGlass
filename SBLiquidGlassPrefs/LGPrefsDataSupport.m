@@ -38,7 +38,13 @@ static NSArray<NSString *> *LGExportablePreferenceKeys(void) {
     NSArray<NSArray<NSDictionary *> *> *sources = @[
         LGAllSurfaceItems(),
         LGMoreOptionsItems(),
-        LGPrefsSettingsItems()
+        LGPrefsSettingsItems(),
+        LGOverviewToggleItems(),
+        LGGlobalGlassTuningItems(),
+        LGGlobalColorTuningItems(),
+        LGAppearanceSettingsItems(),
+        LGPerformanceSettingsItems(),
+        LGDataSettingsItems()
     ];
     for (NSArray<NSDictionary *> *items in sources) {
         for (NSDictionary *item in items) {
@@ -862,6 +868,187 @@ NSArray<NSDictionary *> *LGMoreOptionsItems(void) {
                                   @"importPreferences")];
 
     return [items copy];
+}
+
+// ---------------------------------------------------------------------------
+// V1.1.0 redesigned tabs — item definitions
+// ---------------------------------------------------------------------------
+
+// 总览 · 系统界面：每个表面的快速开关（沿用渲染侧 lgHostEnabled 同款键）
+NSArray<NSDictionary *> *LGOverviewToggleItems(void) {
+    return @[
+        LGSwitchSetting(@"Dock.Enabled",
+                        LGLocalized(@"prefs.overview.toggle.dock"),
+                        LGLocalized(@"prefs.overview.toggle.dock.subtitle"), YES),
+        LGSwitchSetting(@"AppIcons.Enabled",
+                        LGLocalized(@"prefs.overview.toggle.app_icons"),
+                        LGLocalized(@"prefs.overview.toggle.app_icons.subtitle"), YES),
+        LGSwitchSetting(@"FolderIcon.Enabled",
+                        LGLocalized(@"prefs.overview.toggle.folder"),
+                        LGLocalized(@"prefs.overview.toggle.folder.subtitle"), NO),
+        LGSwitchSetting(@"Widgets.Enabled",
+                        LGLocalized(@"prefs.overview.toggle.widgets"),
+                        LGLocalized(@"prefs.overview.toggle.widgets.subtitle"), NO),
+        LGSwitchSetting(@"ControlCenter.Enabled",
+                        LGLocalized(@"prefs.overview.toggle.control_center"),
+                        LGLocalized(@"prefs.overview.toggle.control_center.subtitle"), NO),
+        LGSwitchSetting(@"Notification.Enabled",
+                        LGLocalized(@"prefs.overview.toggle.notifications"),
+                        LGLocalized(@"prefs.overview.toggle.notifications.subtitle"), NO),
+        LGSwitchSetting(@"QuickActions.Enabled",
+                        LGLocalized(@"prefs.overview.toggle.lockscreen"),
+                        LGLocalized(@"prefs.overview.toggle.lockscreen.subtitle"), NO),
+        LGSwitchSetting(@"Keyboard.Enabled",
+                        LGLocalized(@"prefs.overview.toggle.keyboard"),
+                        LGLocalized(@"prefs.overview.toggle.keyboard.subtitle"), NO),
+    ];
+}
+
+// 玻璃效果 · 全局玻璃参数（渲染侧按乘数作用于各表面已配置值）
+NSArray<NSDictionary *> *LGGlobalGlassTuningItems(void) {
+    return @[
+        LGSliderSetting(@"Global.GlassStrength",
+                        LGLocalized(@"prefs.glass.strength.title"),
+                        LGLocalized(@"prefs.glass.strength.subtitle"),
+                        0.65, 0.0, 1.0, 2),
+        LGSliderSetting(@"Global.RefractionStrength",
+                        LGLocalized(@"prefs.glass.refraction.title"),
+                        LGLocalized(@"prefs.glass.refraction.subtitle"),
+                        0.50, 0.0, 1.0, 2),
+        LGSliderSetting(@"Global.BlurStrength",
+                        LGLocalized(@"prefs.glass.blur.title"),
+                        LGLocalized(@"prefs.glass.blur.subtitle"),
+                        0.40, 0.0, 1.0, 2),
+        LGSliderSetting(@"Global.SpecularStrength",
+                        LGLocalized(@"prefs.glass.specular.title"),
+                        LGLocalized(@"prefs.glass.specular.subtitle"),
+                        0.60, 0.0, 1.0, 2),
+        LGSliderSetting(@"Global.DispersionStrength",
+                        LGLocalized(@"prefs.glass.dispersion.title"),
+                        LGLocalized(@"prefs.glass.dispersion.subtitle"),
+                        0.30, 0.0, 1.0, 2),
+        LGSliderSetting(@"Global.GlassThickness",
+                        LGLocalized(@"prefs.glass.thickness.title"),
+                        LGLocalized(@"prefs.glass.thickness.subtitle"),
+                        0.70, 0.0, 1.0, 2),
+    ];
+}
+
+// 玻璃效果 · 颜色调节（全局色调 + 4 段渐变）
+NSArray<NSDictionary *> *LGGlobalColorTuningItems(void) {
+    return @[
+        @{ @"type": @"color", @"key": @"Global.GlassTintColor",
+           @"title": LGLocalized(@"prefs.glass.tint.title"),
+           @"subtitle": LGLocalized(@"prefs.glass.tint.subtitle"),
+           @"default": @"#00000000" },
+        @{ @"type": @"color", @"key": @"Global.GradientColor1",
+           @"title": LGLocalized(@"prefs.glass.gradient1"),
+           @"subtitle": LGLocalized(@"prefs.glass.gradient1.subtitle"),
+           @"default": @"#00000000" },
+        @{ @"type": @"color", @"key": @"Global.GradientColor2",
+           @"title": LGLocalized(@"prefs.glass.gradient2"),
+           @"subtitle": LGLocalized(@"prefs.glass.gradient2.subtitle"),
+           @"default": @"#00000000" },
+        @{ @"type": @"color", @"key": @"Global.GradientColor3",
+           @"title": LGLocalized(@"prefs.glass.gradient3"),
+           @"subtitle": LGLocalized(@"prefs.glass.gradient3.subtitle"),
+           @"default": @"#00000000" },
+        @{ @"type": @"color", @"key": @"Global.GradientColor4",
+           @"title": LGLocalized(@"prefs.glass.gradient4"),
+           @"subtitle": LGLocalized(@"prefs.glass.gradient4.subtitle"),
+           @"default": @"#00000000" },
+    ];
+}
+
+// 设置 · 外观设置
+NSArray<NSDictionary *> *LGAppearanceSettingsItems(void) {
+    return @[
+        LGSwitchSetting(@"Global.FollowSystemAppearance",
+                        LGLocalized(@"prefs.settings.appearance.follow_system.title"),
+                        LGLocalized(@"prefs.settings.appearance.follow_system.subtitle"), YES),
+        LGSwitchSetting(@"Global.DarkEnhancement",
+                        LGLocalized(@"prefs.settings.appearance.dark_enhance.title"),
+                        LGLocalized(@"prefs.settings.appearance.dark_enhance.subtitle"), NO),
+        LGSwitchSetting(@"Global.IconHighlight",
+                        LGLocalized(@"prefs.settings.appearance.icon_highlight.title"),
+                        LGLocalized(@"prefs.settings.appearance.icon_highlight.subtitle"), YES),
+    ];
+}
+
+// 设置 · 性能与优化
+NSArray<NSDictionary *> *LGPerformanceSettingsItems(void) {
+    return @[
+        LGMenuSetting(@"Global.PerformanceMode",
+                      LGLocalized(@"prefs.settings.performance.mode.title"),
+                      @"",
+                      @"balanced",
+                      @[
+                          @{ @"value": @"balanced", @"title": LGLocalized(@"prefs.settings.performance.mode.balanced") },
+                          @{ @"value": @"performance", @"title": LGLocalized(@"prefs.settings.performance.mode.performance") },
+                          @{ @"value": @"power_save", @"title": LGLocalized(@"prefs.settings.performance.mode.power_save") },
+                      ]),
+        LGMenuSetting(@"Global.AnimationStyle",
+                      LGLocalized(@"prefs.settings.performance.animation.title"),
+                      @"",
+                      @"standard",
+                      @[
+                          @{ @"value": @"standard", @"title": LGLocalized(@"prefs.settings.performance.animation.standard") },
+                          @{ @"value": @"light", @"title": LGLocalized(@"prefs.settings.performance.animation.light") },
+                          @{ @"value": @"rich", @"title": LGLocalized(@"prefs.settings.performance.animation.rich") },
+                      ]),
+        LGMenuSetting(@"Global.RefreshRateLimit",
+                      LGLocalized(@"prefs.settings.performance.refresh_rate.title"),
+                      @"",
+                      @"60",
+                      @[
+                          @{ @"value": @"60", @"title": @"60 FPS" },
+                          @{ @"value": @"90", @"title": @"90 FPS" },
+                          @{ @"value": @"120", @"title": @"120 FPS" },
+                          @{ @"value": @"unlimited", @"title": LGLocalized(@"prefs.settings.performance.refresh_rate.unlimited") },
+                      ]),
+    ];
+}
+
+// 设置 · 数据与备份
+NSArray<NSDictionary *> *LGDataSettingsItems(void) {
+    return @[
+        LGNavSetting(LGLocalized(@"prefs.settings.data.export.title"),
+                     LGLocalized(@"prefs.settings.data.export.subtitle"),
+                     @"exportPreferences"),
+        LGNavSetting(LGLocalized(@"prefs.settings.data.import.title"),
+                     LGLocalized(@"prefs.settings.data.import.subtitle"),
+                     @"importPreferences"),
+        LGNavSetting(LGLocalized(@"prefs.settings.data.reset.title"),
+                     LGLocalized(@"prefs.settings.data.reset.subtitle"),
+                     @"handleResetAllPressed"),
+    ];
+}
+
+NSArray<NSString *> *LGGlobalGlassResetKeys(void) {
+    return @[
+        @"Global.GlassStrength",
+        @"Global.RefractionStrength",
+        @"Global.BlurStrength",
+        @"Global.SpecularStrength",
+        @"Global.DispersionStrength",
+        @"Global.GlassThickness",
+        @"Global.GlassTintColor",
+        @"Global.GradientColor1",
+        @"Global.GradientColor2",
+        @"Global.GradientColor3",
+        @"Global.GradientColor4",
+    ];
+}
+
+void LGApplyGlobalGlassDefaults(void) {
+    for (NSString *key in LGGlobalGlassResetKeys()) {
+        if ([key hasPrefix:@"Global.Glass"] || [key hasPrefix:@"Global.Refraction"] ||
+            [key hasPrefix:@"Global.Blur"] || [key hasPrefix:@"Global.Specular"] ||
+            [key hasPrefix:@"Global.Dispersion"]) continue; // 数值键以读取默认值为准，无需落盘
+        if (![LGReadPreferenceObject(key, nil) isKindOfClass:[NSString class]]) {
+            LGWritePreferenceObject(key, @"#00000000");
+        }
+    }
 }
 
 NSString *LGExportPreferencesJSONString(void) {
