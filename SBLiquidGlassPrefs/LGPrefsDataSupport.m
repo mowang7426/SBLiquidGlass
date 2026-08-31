@@ -768,6 +768,12 @@ NSArray<NSDictionary *> *LGAllSurfaceItems(void) {
 
 NSArray<NSDictionary *> *LGPrefsSettingsItems(void) {
     return @[
+        LGSectionSetting(LGLocalized(@"prefs.settings.section.app_exclusion.title"),
+                        LGLocalized(@"prefs.settings.section.app_exclusion.subtitle")),
+        LGKeyedNavSetting(@"GlobalControls.Exclusions",
+                          LGLocalized(@"prefs.widgets.app_exclusion.title"),
+                          LGLocalized(@"prefs.widgets.app_exclusion.subtitle"),
+                          @"editGlobalControlsExclusions"),
         LGSpacerSetting(2.0, 0.0),
         LGAboutContentSetting(),
     ];
