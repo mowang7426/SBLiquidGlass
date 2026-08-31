@@ -972,6 +972,15 @@ NSArray<NSDictionary *> *LGAppearanceSettingsItems(void) {
         LGSwitchSetting(@"Global.IconHighlight",
                         LGLocalized(@"prefs.settings.appearance.icon_highlight.title"),
                         LGLocalized(@"prefs.settings.appearance.icon_highlight.subtitle"), YES),
+        LGMenuSetting(@"LGPrefsLanguage",
+                      LGLocalized(@"prefs.settings.appearance.language.title"),
+                      LGLocalized(@"prefs.settings.appearance.language.subtitle"),
+                      @"en",
+                      @[
+                          @{@"value": @"en", @"title": @"English"},
+                          @{@"value": @"zh-Hans", @"title": @"简体中文"},
+                          @{@"value": @"zh-Hant-TW", @"title": @"繁體中文"},
+                      ]),
     ];
 }
 

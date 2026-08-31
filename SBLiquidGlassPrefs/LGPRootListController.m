@@ -474,14 +474,18 @@ static NSString * const kLGRuntimeCacheUsageBytesKey = @"__runtime_cache_usage_b
 
 - (NSString *)lgMenuSelectionTitleForItem:(NSDictionary *)item {
     NSString *key = item[@"key"];
-    id storedValue = LGReadPreferenceObject(key, item[@"default"]);
     NSString *currentValue = nil;
-    if ([storedValue isKindOfClass:[NSString class]]) {
-        currentValue = storedValue;
-    } else if ([storedValue respondsToSelector:@selector(stringValue)]) {
-        currentValue = [storedValue stringValue];
+    if ([key isEqualToString:@"LGPrefsLanguage"]) {
+        currentValue = LGCurrentPrefsLanguageCode();
     } else {
-        currentValue = [[storedValue description] copy];
+        id storedValue = LGReadPreferenceObject(key, item[@"default"]);
+        if ([storedValue isKindOfClass:[NSString class]]) {
+            currentValue = storedValue;
+        } else if ([storedValue respondsToSelector:@selector(stringValue)]) {
+            currentValue = [storedValue stringValue];
+        } else {
+            currentValue = [[storedValue description] copy];
+        }
     }
     for (NSDictionary *choice in item[@"choices"]) {
         if ([choice[@"value"] isEqualToString:currentValue]) {
@@ -509,9 +513,13 @@ static NSString * const kLGRuntimeCacheUsageBytesKey = @"__runtime_cache_usage_b
     menuButton.showsMenuAsPrimaryAction = YES;
     menuButton.tintColor = [UIColor systemBlueColor];
 
-    __block NSString *selectedValue = [item[@"key"] isKindOfClass:[NSString class]]
-        ? [[LGReadPreferenceObject(item[@"key"], item[@"default"]) description] copy]
-        : [item[@"default"] copy];
+    NSString *menuKey = item[@"key"];
+    BOOL isLanguageMenu = [menuKey isEqualToString:@"LGPrefsLanguage"];
+    __block NSString *selectedValue = isLanguageMenu
+        ? [LGCurrentPrefsLanguageCode() copy]
+        : ([menuKey isKindOfClass:[NSString class]]
+            ? [[LGReadPreferenceObject(menuKey, item[@"default"]) description] copy]
+            : [item[@"default"] copy]);
 
     void (^applyMenuSelectionTitle)(NSString *) = ^(NSString *newTitle) {
         if (!newTitle.length) return;
@@ -541,7 +549,11 @@ static NSString * const kLGRuntimeCacheUsageBytesKey = @"__runtime_cache_usage_b
                                           identifier:nil
                                              handler:^(__kindof UIAction * _Nonnull actionObj) {
             (void)actionObj;
-            LGWritePreferenceObject(item[@"key"], value);
+            if (isLanguageMenu) {
+                LGSetCurrentPrefsLanguageCode(value);
+            } else {
+                LGWritePreferenceObject(menuKey, value);
+            }
             selectedValue = [value copy];
             applyMenuSelectionTitle(title);
             __strong typeof(weakSelf) strongSelf = weakSelf;
