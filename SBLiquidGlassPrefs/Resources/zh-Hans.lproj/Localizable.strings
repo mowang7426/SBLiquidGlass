@@ -236,6 +236,8 @@
 "prefs.settings.appearance.dark_enhance.subtitle" = "深色模式下增强玻璃对比度。";
 "prefs.settings.appearance.icon_highlight.title" = "图标高光效果";
 "prefs.settings.appearance.icon_highlight.subtitle" = "为图标添加柔和高光。";
+"prefs.settings.appearance.language.title" = "语言";
+"prefs.settings.appearance.language.subtitle" = "切换设置界面语言。";
 "prefs.settings.performance.title" = "性能与优化";
 "prefs.settings.performance.mode.title" = "性能模式";
 "prefs.settings.performance.mode.balanced" = "均衡";
