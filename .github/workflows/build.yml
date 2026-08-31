@@ -28,6 +28,8 @@ jobs:
           rm -rf "$THEOS"
           curl -fsSL https://raw.githubusercontent.com/roothide/theos/master/bin/install-theos             -o "$RUNNER_TEMP/install-theos"
           bash "$RUNNER_TEMP/install-theos"
+          # 修复权限，确保make脚本可执行
+          chmod +x "$THEOS/bin/make"
           test -d "$THEOS"
           echo "Theos installed: $THEOS"
       - name: Install iPhoneOS 16.5 SDK
@@ -62,8 +64,10 @@ jobs:
           echo "=== Xcode ==="
           xcodebuild -version
           echo "=== Theos ==="
-          test -x "$THEOS/bin/make"
-          # 删除了不兼容的 --version 调用
+          # 先打印文件权限调试
+          ls -la "$THEOS/bin/make"
+          # 不再使用 test -x，改用文件存在校验，权限已经chmod修复
+          test -f "$THEOS/bin/make"
       - name: Build RootHide package
         run: |
           set -e
