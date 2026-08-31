@@ -141,8 +141,13 @@ static CGFloat LGNativeBlurRadiusForFilterType(NSString *filterType) {
     NSString *prefix = [NSString stringWithUTF8String:host->preferencePrefix];
     NSString *key = [prefix stringByAppendingString:@".Blur"];
     id value = LGGlassPreferenceValue(key);
-    return [value respondsToSelector:@selector(doubleValue)]
+    CGFloat radius = [value respondsToSelector:@selector(doubleValue)]
         ? MAX(0.0, [value doubleValue]) : host->blur;
+    // V1.1.0: global blur strength scales every surface's blur.
+    id globalBlur = LGGlassPreferenceValue(@"Global.BlurStrength");
+    CGFloat blurStrength = [globalBlur respondsToSelector:@selector(doubleValue)]
+        ? MIN(1.0, MAX(0.0, [globalBlur doubleValue])) : 0.40f;
+    return radius * blurStrength;
 }
 
 static id LGCreateNativeGaussianFilter(Class filterCls, CGFloat radius) {
