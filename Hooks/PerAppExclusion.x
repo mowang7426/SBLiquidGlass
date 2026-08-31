@@ -74,16 +74,14 @@ static void lgEnumerateGlassViewsInView(UIView *view, BOOL hidden) {
     }
 }
 
-// 监听前台应用变化
-%hook SBMainDisplaySceneManager
-- (void)sceneManager:(id)sceneManager didChangeForegroundApplication:(id)application {
-    %orig;
-    [self performSelector:@selector(lg_updateExclusion) withObject:nil afterDelay:0.3];
+// 定时轮询前台应用（不依赖 SpringBoard 私有 API，安全可靠）
+static void lgScheduleExclusionCheck(void) {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        updateExclusionState();
+        lgScheduleExclusionCheck();
+    });
 }
-- (void)lg_updateExclusion {
-    updateExclusionState();
-}
-%end
 
 // 偏好变更时重新加载
 %ctor {
@@ -92,4 +90,5 @@ static void lgEnumerateGlassViewsInView(UIView *view, BOOL hidden) {
         reloadExcludedBundleIDs();
         updateExclusionState();
     });
+    lgScheduleExclusionCheck();
 }
