@@ -52,7 +52,7 @@ BOOL lgHostEnabled(NSString *prefix) {
     }
     if ([v isKindOfClass:[NSNumber class]]) return [v boolValue];
 
-    return [prefix isEqualToString:@"Dock"];
+    return [prefix isEqualToString:@"Dock"] || [prefix isEqualToString:@"AppIcons"];
 }
 
 #pragma mark - uniform injection registry
