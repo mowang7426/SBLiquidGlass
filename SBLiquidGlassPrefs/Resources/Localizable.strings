@@ -246,3 +246,12 @@
 "prefs.app_library.subtitle" = "分别控制 App 资源库里的分类卡片和搜索栏。";
 "prefs.control_center.black_background.title" = "黑色背景";
 "prefs.control_center.black_background.subtitle" = "开启后控制中心背景变为纯黑色。";
+
+"prefs.folder.title" = "文件夹";
+"prefs.folder.subtitle" = "控制文件夹图标和展开后的背景效果。";
+"prefs.folder.folder_icon.title" = "收纳态";
+"prefs.folder.folder_icon.subtitle" = "控制文件夹图标的液态玻璃效果。";
+"prefs.folder.open_folder.title" = "展开态";
+"prefs.folder.open_folder.subtitle" = "控制文件夹展开后的背景效果。";
+"prefs.folder.open_folder_blur.title" = "展开背景模糊";
+"prefs.folder.open_folder_blur.subtitle" = "调整文件夹展开后背景的模糊程度。";
