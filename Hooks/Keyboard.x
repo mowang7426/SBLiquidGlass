@@ -713,9 +713,8 @@ static void LGUpdateKeyboardGlass(UIView *stock) {
     // 自定义背景
     @try {
         BOOL customBg = [LGGlassPreferenceValue(@"Keyboard.CustomBackground") floatValue] > 0.5;
-        NSString *bgPath = [LGGlassPreferenceValue(@"Keyboard.CustomBackgroundPath") isKindOfClass:NSString.class]
-            ? (NSString *)[LGGlassPreferenceValue(@"Keyboard.CustomBackgroundPath")]
-            : @"";
+        id bgPathValue = LGGlassPreferenceValue(@"Keyboard.CustomBackgroundPath");
+        NSString *bgPath = [bgPathValue isKindOfClass:NSString.class] ? (NSString *)bgPathValue : @"";
         UIImageView *bgView = objc_getAssociatedObject(glass, kLGKeyboardCustomBgKey);
         if (customBg && bgPath.length && [[NSFileManager defaultManager] fileExistsAtPath:bgPath]) {
             UIImage *bgImage = [UIImage imageWithContentsOfFile:bgPath];
