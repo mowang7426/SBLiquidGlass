@@ -8,13 +8,11 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = sbliquidglass
 
-sbliquidglass_FILES     = Tweak.x Hooks/Dock.x Hooks/Folder.x Hooks/FolderExtras.x Hooks/AppIcons.x Hooks/Banner.x Hooks/ControlCenter.x \
+sbliquidglass_FILES     = Tweak.x Hooks/Dock.x Hooks/Folder.x Hooks/AppIcons.x Hooks/Banner.x Hooks/ControlCenter.x \
                       Hooks/AppLibrary.x Hooks/SearchPill.x Hooks/Spotlight.x Hooks/Widgets.x Hooks/ContextMenu.x \
                       Hooks/QuickActions.x Hooks/Passcode.x Hooks/Clock.x Hooks/Alerts.x \
                       Hooks/PreferencesControls.x Hooks/CoverSheet.x Hooks/TabBar.x \
-                      Hooks/Keyboard.x Hooks/KeyboardExtras.x \
-                      Hooks/DynamicIsland.x Hooks/SystemControls.x Hooks/LockScreenTime.x \
-                      Hooks/ExternalPlugins.x Hooks/PerAppExclusion.x \
+                      Hooks/Keyboard.x \
                       SBLiquidGlassPrefs/LGPrefsLiquidSlider.m \
                       SBLiquidGlassPrefs/LGPrefsLiquidSwitch.m \
                       Shared/LGGlassKit.x Shared/LGLiveBackdropView.m \
