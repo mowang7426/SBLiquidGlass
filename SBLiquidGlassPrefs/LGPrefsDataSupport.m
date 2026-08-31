@@ -70,6 +70,22 @@ NSString *LGLocalized(NSString *key) {
     return [LGActiveLocalizationBundle() localizedStringForKey:key value:key table:nil];
 }
 
+static NSString *sLGLastSurfaceIdentifier = nil;
+
+NSString *LGLastSurfaceIdentifier(void) {
+    return sLGLastSurfaceIdentifier;
+}
+
+void LGSetLastSurfaceIdentifier(NSString *identifier) {
+    sLGLastSurfaceIdentifier = [identifier copy];
+}
+
+void LGClearLastSurfaceIdentifierIfMatching(NSString *identifier) {
+    if ([sLGLastSurfaceIdentifier isEqualToString:identifier]) {
+        sLGLastSurfaceIdentifier = nil;
+    }
+}
+
 NSString *LGCurrentPrefsLanguageCode(void) {
     NSString *languageCode = [LGPrefsUIStateDefaults() stringForKey:kLGPrefsLanguageKey];
     return languageCode.length ? languageCode : @"en";
