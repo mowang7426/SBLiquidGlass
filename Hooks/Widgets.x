@@ -158,12 +158,14 @@ static void injectWidgetGlass(UIView *container) {
     UIView *self_ = (UIView *)self;
     if (self_.window && lgHostEnabled(@"Widgets") && isWidgetStackBackgroundMaterial(self_))
         lgSuppressStock(self_, @"Widgets", YES);
+    if (self_.window) injectTodayGlass(self_);
 }
 - (void)layoutSubviews {
     %orig;
     UIView *self_ = (UIView *)self;
     if (lgHostEnabled(@"Widgets") && isWidgetStackBackgroundMaterial(self_))
         lgSuppressStock(self_, @"Widgets", YES);
+    injectTodayGlass(self_);
 }
 - (void)setHidden:(BOOL)hidden {
     UIView *self_ = (UIView *)self;
@@ -221,15 +223,3 @@ static void injectWidgetGlass(UIView *container) {
 }
 %end
 
-// 负一屏背景模糊：hook MTMaterialView
-%hook MTMaterialView
-- (void)didMoveToWindow {
-    %orig;
-    UIView *self_ = (UIView *)self;
-    if (self_.window) injectTodayGlass(self_);
-}
-- (void)layoutSubviews {
-    %orig;
-    injectTodayGlass((UIView *)self);
-}
-%end
