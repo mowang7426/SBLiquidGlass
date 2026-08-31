@@ -8,9 +8,9 @@
 #import <objc/runtime.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
-static void * const kLGSliderRefKey = &kLGSliderRefKey;
-static void * const kLGValueLabelRefKey = &kLGValueLabelRefKey;
-static void * const kLGColorWellRefKey = &kLGColorWellRefKey;
+static void *kLGSliderRefKey = &kLGSliderRefKey;
+static void *kLGValueLabelRefKey = &kLGValueLabelRefKey;
+static void *kLGColorWellRefKey = &kLGColorWellRefKey;
 
 typedef NS_ENUM(NSUInteger, LGTabIndex) {
     LGTabOverview = 0,
