@@ -719,15 +719,17 @@ NSArray<NSDictionary *> *LGAppLibraryItems(void) {
 }
 
 NSArray<NSDictionary *> *LGWidgetItems(void) {
-    return LGJoinItemGroups(@[
-        LGRendererItemsForHostPrefix(@"Widgets"),
-        @[
-            LGKeyedNavSetting(@"RWB.ThirdPartyBundleIDs",
-                              LGLocalized(@"prefs.misc.rwb_third_party.title"),
-                              LGLocalized(@"prefs.misc.rwb_third_party.subtitle"),
-                              @"editThirdPartyAppRWB"),
-        ],
-    ]);
+    return @[
+        LGSectionSetting(LGLocalized(@"prefs.widgets.title"),
+                        LGLocalized(@"prefs.widgets.subtitle")),
+        LGSwitchSetting(@"Widgets.Enabled",
+                        LGLocalized(@"prefs.widgets.today_blur.title"),
+                        LGLocalized(@"prefs.widgets.today_blur.subtitle"), YES),
+        LGKeyedNavSetting(@"GlobalControls.Exclusions",
+                          LGLocalized(@"prefs.widgets.app_exclusion.title"),
+                          LGLocalized(@"prefs.widgets.app_exclusion.subtitle"),
+                          @"editGlobalControlsExclusions"),
+    ];
 }
 
 NSArray<NSDictionary *> *LGHomescreenItems(void) {
