@@ -744,16 +744,16 @@ NSArray<NSDictionary *> *LGLockscreenItems(void) {
 }
 
 NSArray<NSDictionary *> *LGAppLibraryItems(void) {
-    return LGJoinItemGroups(@[
-        @[
-            LGSectionSetting(LGLocalized(@"prefs.section.category_pods.title"), nil),
-        ],
-        LGRendererItemsForHostPrefix(@"AppLibrary"),
-        @[
-            LGSectionSetting(LGLocalized(@"prefs.section.search_field.title"), nil),
-        ],
-        LGRendererItemsForHostPrefix(@"AppLibSearch"),
-    ]);
+    return @[
+        LGSectionSetting(LGLocalized(@"prefs.surface.app_library.title"),
+                        LGLocalized(@"prefs.app_library.subtitle")),
+        LGSwitchSetting(@"AppLibSearch.Enabled",
+                        LGLocalized(@"prefs.section.search_field.title"),
+                        nil, NO),
+        LGSwitchSetting(@"AppLibrary.Enabled",
+                        LGLocalized(@"prefs.section.category_pods.title"),
+                        nil, NO),
+    ];
 }
 
 NSArray<NSDictionary *> *LGWidgetItems(void) {
