@@ -1,5 +1,4 @@
 "prefs.app_name" = "SBLiquidGlass";
-
 "prefs.control.enabled" = "启用";
 "prefs.control.blur" = "模糊";
 "prefs.control.corner_radius" = "圆角半径";
@@ -18,7 +17,6 @@
 "prefs.control.variable_font_softness" = "柔和度";
 "prefs.control.motion_highlights" = "运动高光";
 "prefs.control.motion_highlights_sensitivity" = "运动灵敏度";
-
 "prefs.subtitle.enabled" = "启用或停用此玻璃视图。";
 "prefs.subtitle.blur" = "玻璃效果的柔和程度。";
 "prefs.subtitle.corner_radius" = "玻璃视图的圆角。";
@@ -39,7 +37,6 @@
 "prefs.subtitle.variable_font_softness" = "iOS 26 字体的“softness”轴数值。";
 "prefs.subtitle.global_enabled" = "所有表面的总开关。";
 "prefs.root.runtime_cache_footer" = "RAM 占用：%@";
-
 "prefs.section.dock.title" = "Dock";
 "prefs.section.folder_icons.title" = "文件夹图标";
 "prefs.section.folder_open.title" = "打开的文件夹";
@@ -55,7 +52,6 @@
 "prefs.section.misc.title" = "杂项";
 "prefs.section.motion_highlights.title" = "运动高光";
 "prefs.section.motion_highlights.subtitle" = "利用设备运动来引导玻璃的镜面高光。";
-
 "prefs.button.reset" = "重置";
 "prefs.button.cancel" = "取消";
 "prefs.button.respring" = "重启 SpringBoard";
@@ -64,7 +60,6 @@
 "prefs.button.ok" = "确定";
 "prefs.button.go_to_top" = "回到顶部";
 "prefs.button.apply" = "应用";
-
 "prefs.reset_confirm.title" = "确认重置？";
 "prefs.reset_confirm.body" = "此操作会将所有偏好设置重置为默认值。确定要继续吗？";
 "prefs.reset_confirm.surface_body_format" = "这将把 %@ 的所有设置重置为默认值。确定要继续吗？";
@@ -83,7 +78,6 @@
 "prefs.jump_to.title" = "跳转到";
 "prefs.value_prompt.title" = "设定数值";
 "prefs.value_prompt.message" = "请输入一个值。";
-
 "prefs.hero.eyebrow" = "简约新界面";
 "prefs.hero.subtitle" = "V1.1.0 Alpha2 · 液态玻璃美学";
 "prefs.surface.homescreen.title" = "主屏幕";
@@ -122,13 +116,11 @@
 "prefs.misc.import_prefs.subtitle" = "导入一个偏好设置 JSON 文件。";
 "prefs.misc.settings_controls.title" = "iOS 26 设置";
 "prefs.misc.settings_controls.subtitle" = "尝试复现 iOS 26 设置应用的体验。";
-
 "prefs.section.keyboard_geometry.title" = "键盘几何";
 "prefs.section.keyboard_geometry.subtitle" = "键盘玻璃的形状与间距。";
 "prefs.control.keyboard_overhang" = "悬伸量";
 "prefs.subtitle.keyboard_overhang" = "当预测栏隐藏时，键盘上方预留的额外高度。";
-
-/* TODO: Translate synced English fallback strings. */
+/* TODO: Translate synced English fallback strings. */;
 "prefs.control.bezel_ratio" = "边框比例";
 "prefs.control.light_tint_color" = "浅色模式色调";
 "prefs.control.dark_tint_color" = "深色模式色调";
@@ -164,18 +156,15 @@
 "prefs.global_controls.sliders.subtitle" = "用液态滑块替换标准滑块。";
 "prefs.global_controls.segmented.title" = "分段控件";
 "prefs.global_controls.segmented.subtitle" = "为分段控件添加液态选择行为。";
-
-/* TODO: Translate synced English fallback strings. */
+/* TODO: Translate synced English fallback strings. */;
 "prefs.button.more" = "更多选项";
-
-/* TODO: Translate synced English fallback strings. */
+/* TODO: Translate synced English fallback strings. */;
 "prefs.app_icons_warning.title" = "启用应用图标？";
 "prefs.app_icons_warning.body" = "请注意，启用应用图标会非常卡顿。如果你开启了此表面，请不要抱怨卡顿问题，谢谢。";
 "prefs.app_icons_warning.confirm" = "启用";
 "prefs.control.fresnel_glare" = "菲涅尔眩光";
 "prefs.subtitle.fresnel_glare" = "控制玻璃着色器添加的边缘眩光。";
-
-/* V1.1.0 全新三页设置界面 */
+/* V1.1.0 全新三页设置界面 */;
 "prefs.hero.highlight.1" = "全新简约设计";
 "prefs.hero.highlight.2" = "液态玻璃美学";
 "prefs.hero.highlight.3" = "丝滑交互体验";
@@ -256,8 +245,6 @@
 "prefs.settings.data.import.subtitle" = "导入备份的设置文件。";
 "prefs.settings.data.reset.title" = "重置所有设置";
 "prefs.settings.data.reset.subtitle" = "恢复默认设置。";
-
 "prefs.notification.background_adaptive" = "背景自适应";
 "prefs.notification.background_adaptive.subtitle" = "根据深浅色模式自动调整背景色调，增强文字可读性。";
-
 "prefs.app_library.subtitle" = "分别控制 App 资源库里的分类卡片和搜索栏。";
