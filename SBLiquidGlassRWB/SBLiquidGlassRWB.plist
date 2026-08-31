@@ -1,0 +1,16 @@
+{
+    Filter = {
+        Bundles = (
+            "com.apple.springboard",
+            "com.apple.chronod",
+            "com.apple.chrono.WidgetRenderer-Default",
+            "com.apple.chrono.WidgetRenderer-CarPlay"
+        );
+        Executables = (
+            "SpringBoard",
+            "chronod",
+            "WidgetRenderer_Default",
+            "WidgetRenderer_CarPlay"
+        );
+    };
+}
