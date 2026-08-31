@@ -253,3 +253,5 @@
 
 "prefs.notification.background_adaptive" = "Background Adaptive";
 "prefs.notification.background_adaptive.subtitle" = "Adjusts background tint automatically for better text readability.";
+
+"prefs.app_library.subtitle" = "Separately control category pods and search field in App Library.";
