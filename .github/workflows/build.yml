@@ -1,4 +1,4 @@
-name: Build
+name: sbliquidglass
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
       - main
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -15,83 +15,103 @@ jobs:
     name: Build tweak
     runs-on: macos-14
 
+    env:
+      THEOS: ${{ github.workspace }}/theos
+      SDKVERSION: 16.5
+      THEOS_SDK_VERSION: 16.5
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install build tools
         run: |
           set -e
-          brew update
-          brew install ldid
+          brew install ldid gmake
 
       - name: Install RootHide Theos
         run: |
           set -e
-          export THEOS="$GITHUB_WORKSPACE/theos"
-          echo "THEOS=$THEOS" >> "$GITHUB_ENV"
 
           rm -rf "$THEOS"
-          git clone --recursive --depth=1 https://github.com/roothide/theos.git "$THEOS"
 
-          # Make sure the required Theos toolchain is present.
-          "$THEOS/bin/update-theos"
+          curl -fsSL https://raw.githubusercontent.com/roothide/theos/master/bin/install-theos             -o "$RUNNER_TEMP/install-theos"
 
-      - name: Install iPhoneOS SDK
+          bash "$RUNNER_TEMP/install-theos"
+
+          test -d "$THEOS"
+          echo "Theos installed: $THEOS"
+
+      - name: Install iPhoneOS 16.5 SDK
         run: |
           set -e
-
-          export THEOS="$GITHUB_WORKSPACE/theos"
-          SDK_VERSION="17.0"
-          SDK_NAME="iPhoneOS${SDK_VERSION}.sdk"
-          SDK_REPO="https://github.com/xybp888/iOS-SDKs.git"
 
           mkdir -p "$THEOS/sdks"
 
-          rm -rf "$RUNNER_TEMP/iOS-SDKs"
-          git clone             --filter=blob:none             --no-checkout             --depth=1             "$SDK_REPO"             "$RUNNER_TEMP/iOS-SDKs"
+          SDK_URL="https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz"
+          SDK_ARCHIVE="$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz"
 
-          cd "$RUNNER_TEMP/iOS-SDKs"
-          git sparse-checkout init --cone
-          git sparse-checkout set "$SDK_NAME"
-          git checkout
+          rm -rf "$THEOS/sdks/iPhoneOS16.5.sdk"
+          rm -f "$SDK_ARCHIVE"
 
-          test -d "$SDK_NAME"
-          cp -R "$SDK_NAME" "$THEOS/sdks/"
+          echo "Downloading iPhoneOS16.5.sdk..."
+          curl -fL --retry 3 --retry-delay 2             "$SDK_URL"             -o "$SDK_ARCHIVE"
 
-          echo "Installed SDK:"
-          ls -ld "$THEOS/sdks/$SDK_NAME"
+          echo "Extracting SDK..."
+          tar -xJf "$SDK_ARCHIVE" -C "$THEOS/sdks"
 
-      - name: Check build environment
+          test -d "$THEOS/sdks/iPhoneOS16.5.sdk"
+          test -f "$THEOS/sdks/iPhoneOS16.5.sdk/SDKSettings.plist"
+
+          echo "SDK installed successfully:"
+          du -sh "$THEOS/sdks/iPhoneOS16.5.sdk"
+          ls -ld "$THEOS/sdks/iPhoneOS16.5.sdk"
+
+      - name: Verify Theos and SDK
         run: |
           set -e
-          export THEOS="$GITHUB_WORKSPACE/theos"
 
+          echo "=== Environment ==="
           echo "THEOS=$THEOS"
-          echo "Available SDKs:"
+          echo "SDKVERSION=$SDKVERSION"
+          echo "THEOS_SDK_VERSION=$THEOS_SDK_VERSION"
+
+          echo "=== SDK directories ==="
           find "$THEOS/sdks" -maxdepth 1 -type d -name "*.sdk" -print
 
-          echo "Xcode:"
+          echo "=== Required SDK ==="
+          test -d "$THEOS/sdks/iPhoneOS16.5.sdk"
+          test -f "$THEOS/sdks/iPhoneOS16.5.sdk/SDKSettings.plist"
+
+          echo "=== Xcode ==="
           xcodebuild -version
 
-          echo "Clang:"
-          xcrun --sdk iphoneos clang --version
+          echo "=== Theos ==="
+          test -x "$THEOS/bin/make"
+          "$THEOS/bin/make" --version || true
 
       - name: Build RootHide package
         run: |
           set -e
+
           export THEOS="$GITHUB_WORKSPACE/theos"
+          export SDKVERSION=16.5
+          export THEOS_SDK_VERSION=16.5
 
-          make clean
-          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide
+          echo "Building with:"
+          echo "THEOS=$THEOS"
+          echo "SDKVERSION=$SDKVERSION"
+          echo "SDK=$THEOS/sdks/iPhoneOS16.5.sdk"
 
-      - name: Build Rootless package
+          test -d "$THEOS/sdks/iPhoneOS16.5.sdk"
+
+          "$THEOS/bin/make" clean
+          "$THEOS/bin/make" package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide
+
+      - name: List generated packages
         run: |
           set -e
-          export THEOS="$GITHUB_WORKSPACE/theos"
-
-          make clean
-          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+          find packages -maxdepth 1 -type f -print || true
 
       - name: Upload packages
         uses: actions/upload-artifact@v4
