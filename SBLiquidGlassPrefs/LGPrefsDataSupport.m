@@ -66,6 +66,10 @@ static NSBundle *LGActiveLocalizationBundle(void) {
     return localizedBundle ?: baseBundle;
 }
 
+NSString *LGLocalized(NSString *key) {
+    return [LGActiveLocalizationBundle() localizedStringForKey:key value:key table:nil];
+}
+
 NSString *LGCurrentPrefsLanguageCode(void) {
     NSString *languageCode = [LGPrefsUIStateDefaults() stringForKey:kLGPrefsLanguageKey];
     return languageCode.length ? languageCode : @"en";
