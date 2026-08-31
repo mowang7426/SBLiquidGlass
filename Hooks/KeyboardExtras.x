@@ -93,16 +93,18 @@ static void applyForceDarkMode(UIView *keyboardView) {
 %hook UIKeyboard
 - (void)didMoveToWindow {
     %orig;
-    if (self.window) {
-        applyKeyboardBackground(self);
-        applyForceDarkMode(self);
+    UIView *self_ = (UIView *)self;
+    if (self_.window) {
+        applyKeyboardBackground(self_);
+        applyForceDarkMode(self_);
     }
 }
 - (void)layoutSubviews {
     %orig;
-    UIImageView *bgView = objc_getAssociatedObject(self, kKeyboardBGKey);
+    UIView *self_ = (UIView *)self;
+    UIImageView *bgView = objc_getAssociatedObject(self_, kKeyboardBGKey);
     if (bgView) {
-        bgView.frame = self.bounds;
+        bgView.frame = self_.bounds;
     }
 }
 %end
@@ -111,9 +113,10 @@ static void applyForceDarkMode(UIView *keyboardView) {
 %hook UIKeyboardLayoutStar
 - (void)didMoveToWindow {
     %orig;
-    if (self.window && self.superview) {
-        applyKeyboardBackground(self.superview);
-        applyForceDarkMode(self.superview);
+    UIView *self_ = (UIView *)self;
+    if (self_.window && self_.superview) {
+        applyKeyboardBackground(self_.superview);
+        applyForceDarkMode(self_.superview);
     }
 }
 %end

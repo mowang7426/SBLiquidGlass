@@ -165,8 +165,9 @@ static void injectDynamicIsland(UIView *material) {
     %orig;
     BOOL hide = lgPrefFloat(@"DynamicIsland.Hide", 0.0) > 0.5;
     if (hide && lgHostEnabled(@"DynamicIsland")) {
-        self.hidden = YES;
-        self.alpha = 0.0;
+        UIView *self_ = (UIView *)self;
+        self_.hidden = YES;
+        self_.alpha = 0.0;
     }
 }
 %end

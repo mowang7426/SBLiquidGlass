@@ -35,12 +35,13 @@ static void adjustFolderIconGlassCornerRadius(UIView *iconView) {
 %hook SBFolderIconImageView
 - (void)layoutSubviews {
     %orig;
-    adjustFolderIconGlassCornerRadius(self);
+    adjustFolderIconGlassCornerRadius((UIView *)self);
 }
 - (void)didMoveToWindow {
     %orig;
-    if (self.window) {
-        adjustFolderIconGlassCornerRadius(self);
+    UIView *selfView = (UIView *)self;
+    if (selfView.window) {
+        adjustFolderIconGlassCornerRadius(selfView);
     }
 }
 %end
@@ -49,8 +50,9 @@ static void adjustFolderIconGlassCornerRadius(UIView *iconView) {
 %hook SBIconView
 - (void)layoutSubviews {
     %orig;
+    UIView *selfView = (UIView *)self;
     // 检查是否是文件夹图标
-    for (UIView *subview in self.subviews) {
+    for (UIView *subview in selfView.subviews) {
         if ([NSStringFromClass(subview.class) containsString:@"FolderIconImageView"]) {
             adjustFolderIconGlassCornerRadius(subview);
         }
