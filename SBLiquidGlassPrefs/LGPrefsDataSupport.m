@@ -535,21 +535,33 @@ NSArray<NSDictionary *> *LGDockItems(void) {
 }
 
 NSArray<NSDictionary *> *LGKeyboardItems(void) {
-    return LGJoinItemGroups(@[
-        LGRendererItemsForHostPrefix(@"Keyboard"),
-        LGSettingsControlledByKey(@[
-            LGSectionSetting(LGLocalized(@"prefs.section.keyboard_geometry.title"),
-                             LGLocalized(@"prefs.section.keyboard_geometry.subtitle")),
+    return @[
+        LGSectionSetting(LGLocalized(@"prefs.keyboard.title"),
+                        LGLocalized(@"prefs.keyboard.subtitle")),
+        LGSwitchSetting(@"Keyboard.Enabled",
+                        LGLocalized(@"prefs.keyboard.liquid_glass.title"),
+                        LGLocalized(@"prefs.keyboard.liquid_glass.subtitle"), YES),
+        LGSettingControlledByKey(
             LGSliderSetting(@"Keyboard.CornerRadius",
-                            LGLocalized(@"prefs.control.corner_radius"),
-                            LGLocalized(@"prefs.subtitle.corner_radius"),
+                            LGLocalized(@"prefs.keyboard.corner_radius.title"),
+                            LGLocalized(@"prefs.keyboard.corner_radius.subtitle"),
                             LGKeyboardDefaultCornerRadius, 0.0, 60.0, 1),
-            LGSliderSetting(@"Keyboard.Overhang",
-                            LGLocalized(@"prefs.control.keyboard_overhang"),
-                            LGLocalized(@"prefs.subtitle.keyboard_overhang"),
-                            LGKeyboardDefaultOverhang, 0.0, 60.0, 1),
-        ], @"Keyboard.Enabled", @YES),
-    ]);
+            @"Keyboard.Enabled", @YES),
+        LGSwitchSetting(@"Keyboard.ForceDarkMode",
+                        LGLocalized(@"prefs.keyboard.force_dark.title"),
+                        LGLocalized(@"prefs.keyboard.force_dark.subtitle"), NO),
+        LGSwitchSetting(@"Keyboard.CustomBackground",
+                        LGLocalized(@"prefs.keyboard.custom_background.title"),
+                        LGLocalized(@"prefs.keyboard.custom_background.subtitle"), NO),
+        LGSettingControlledByKey(@{
+            @"type": @"text",
+            @"key": @"Keyboard.CustomBackgroundPath",
+            @"title": LGLocalized(@"prefs.keyboard.background_path.title"),
+            @"subtitle": LGLocalized(@"prefs.keyboard.background_path.subtitle"),
+            @"default": @"",
+            @"placeholder": @"/var/mobile/Library/keyboard_bg.jpg"
+        }, @"Keyboard.CustomBackground", @YES),
+    ];
 }
 
 NSArray<NSDictionary *> *LGFolderItems(void) {
