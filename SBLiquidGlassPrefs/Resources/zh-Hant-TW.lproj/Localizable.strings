@@ -255,3 +255,16 @@
 "prefs.folder.open_folder.subtitle" = "控制文件夹展开后的背景效果。";
 "prefs.folder.open_folder_blur.title" = "展开背景模糊";
 "prefs.folder.open_folder_blur.subtitle" = "调整文件夹展开后背景的模糊程度。";
+
+"prefs.keyboard.title" = "键盘";
+"prefs.keyboard.subtitle" = "控制键盘背景的液态玻璃效果。";
+"prefs.keyboard.liquid_glass.title" = "液态玻璃";
+"prefs.keyboard.liquid_glass.subtitle" = "启用键盘背景的液态玻璃效果。";
+"prefs.keyboard.corner_radius.title" = "圆角";
+"prefs.keyboard.corner_radius.subtitle" = "调整键盘背景的圆角大小。";
+"prefs.keyboard.force_dark.title" = "强制暗色模式";
+"prefs.keyboard.force_dark.subtitle" = "强制键盘使用暗色背景。";
+"prefs.keyboard.custom_background.title" = "自定义背景";
+"prefs.keyboard.custom_background.subtitle" = "使用自定义图片作为键盘背景。";
+"prefs.keyboard.background_path.title" = "背景路径";
+"prefs.keyboard.background_path.subtitle" = "输入自定义背景图片的文件路径。";
