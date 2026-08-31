@@ -41,7 +41,7 @@ static void LGUpdateNotificationAdaptiveOverlay(UIView *material) {
         UIView *parent = material.superview;
         if (!parent) return;
 
-        BOOL enabled = lgPrefFloat(@"Notification.BackgroundAdaptive", 0.0) > 0.5;
+        BOOL enabled = [LGGlassPreferenceValue(@"Notification.BackgroundAdaptive") floatValue] > 0.5;
         UIView *overlay = objc_getAssociatedObject(material, kLGNotificationAdaptiveOverlayKey);
 
         if (!enabled) {
