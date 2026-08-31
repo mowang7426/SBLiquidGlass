@@ -1,11 +1,11 @@
 #import <UIKit/UIKit.h>
-#import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGGlassKit.h"
 #import <objc/runtime.h>
 #import <CoreText/CoreText.h>
 
-// 锁屏时间样式：自定义字体、字号、磨砂玻璃背景、模糊半径。
-// hook 锁屏时间标签（SBUILabel / CSDateTimeView 内的标签）。
+// 锁屏时间样式：自定义字体、字号、磨砂玻璃背景。
+// 使用 UIVisualEffectView + UIBlurEffect（UIKit 标准 API），避免 CABackdropLayer 私有类崩溃。
+// swizzle UILabel 的 didMoveToWindow / layoutSubviews，识别锁屏时间标签。
 
 static void *kLockTimeGlassKey = &kLockTimeGlassKey;
 static void *kLockTimeOriginalFontKey = &kLockTimeOriginalFontKey;
@@ -24,10 +24,8 @@ static NSString *lgPrefString(NSString *key, NSString *fallback) {
 
 static BOOL isLockScreenTimeLabel(UIView *view) {
     if (!lgHostEnabled(@"LockScreenTime")) return NO;
-    // 锁屏时间标签通常是 SBUILabel 子类，且在 CSDateTimeView / SBDashBoard 内
     if (![view isKindOfClass:[UILabel class]]) return NO;
     UILabel *label = (UILabel *)view;
-    // 时间标签字体通常很大（>40pt）
     if (label.font.pointSize < 30.0) return NO;
     if (hasAncestorOfClassName(view, @"CSDateTimeView")) return YES;
     if (hasAncestorOfClassName(view, @"CSCombinedDateTimeView")) return YES;
@@ -42,7 +40,6 @@ static UIFont *lgLockTimeFont(CGFloat pointSize) {
         UIFont *custom = [UIFont fontWithName:fontName size:pointSize];
         if (custom) return custom;
     }
-    // 尝试加载内置的 iOS26Clock 字体（如果存在）
     NSString *docsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
     NSString *fontPath = [docsPath stringByAppendingPathComponent:@"iOS26Clock-Bold.ttf"];
     if (![[NSFileManager defaultManager] fileExistsAtPath:fontPath]) {
@@ -50,18 +47,23 @@ static UIFont *lgLockTimeFont(CGFloat pointSize) {
         fontPath = [appSupport stringByAppendingPathComponent:@"Liquidify/iOS26Clock-Bold.ttf"];
     }
     if ([[NSFileManager defaultManager] fileExistsAtPath:fontPath]) {
-        NSData *fontData = [NSData dataWithContentsOfFile:fontPath];
-        CGDataProviderRef provider = CGDataProviderCreateWithCFData((CFDataRef)fontData);
-        CGFontRef cgFont = CGFontCreateWithDataProvider(provider);
-        if (cgFont) {
-            NSString *name = (__bridge_transfer NSString *)CGFontCopyPostScriptName(cgFont);
-            CTFontManagerRegisterGraphicsFont(cgFont, NULL);
-            UIFont *font = [UIFont fontWithName:name size:pointSize];
-            CGFontRelease(cgFont);
-            CGDataProviderRelease(provider);
-            if (font) return font;
-        }
-        CGDataProviderRelease(provider);
+        @try {
+            NSData *fontData = [NSData dataWithContentsOfFile:fontPath];
+            CGDataProviderRef provider = CGDataProviderCreateWithCFData((CFDataRef)fontData);
+            if (provider) {
+                CGFontRef cgFont = CGFontCreateWithDataProvider(provider);
+                if (cgFont) {
+                    NSString *name = (__bridge_transfer NSString *)CGFontCopyPostScriptName(cgFont);
+                    CTFontManagerRegisterGraphicsFont(cgFont, NULL);
+                    UIFont *font = [UIFont fontWithName:name size:pointSize];
+                    CGFontRelease(cgFont);
+                    CGDataProviderRelease(provider);
+                    if (font) return font;
+                } else {
+                    CGDataProviderRelease(provider);
+                }
+            }
+        } @catch (__unused NSException *e) {}
     }
     return [UIFont systemFontOfSize:pointSize weight:UIFontWeightBold];
 }
@@ -69,46 +71,42 @@ static UIFont *lgLockTimeFont(CGFloat pointSize) {
 static void applyLockTimeStyle(UILabel *label) {
     if (!isLockScreenTimeLabel(label)) return;
 
-    // 保存原始字体
     UIFont *originalFont = objc_getAssociatedObject(label, kLockTimeOriginalFontKey);
     if (!originalFont) {
         originalFont = label.font;
         objc_setAssociatedObject(label, kLockTimeOriginalFontKey, originalFont, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 
-    // 字号缩放
     CGFloat scale = lgPrefFloat(@"LockScreenTime.FontSizeScale", 1.0);
     CGFloat baseSize = originalFont.pointSize;
     CGFloat newSize = baseSize * MAX(0.5, MIN(3.5, scale));
-
-    // 自定义字体
     label.font = lgLockTimeFont(newSize);
 
-    // 磨砂玻璃背景
     CGFloat frostedOpacity = lgPrefFloat(@"LockScreenTime.FrostedGlassOpacity", 0.0);
-    LGLiveBackdropView *glass = objc_getAssociatedObject(label, kLockTimeGlassKey);
+    UIVisualEffectView *blurView = objc_getAssociatedObject(label, kLockTimeGlassKey);
 
     if (frostedOpacity > 0.01) {
-        if (!glass) {
-            glass = [[LGLiveBackdropView alloc] initWithFrame:label.bounds];
-            glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-            glass.layer.cornerRadius = 12.0;
-            glass.layer.cornerCurve = kCACornerCurveContinuous;
-            glass.clipsToBounds = YES;
-            glass.userInteractionEnabled = NO;
-            [label.superview insertSubview:glass belowSubview:label];
-            objc_setAssociatedObject(label, kLockTimeGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            lgTrackGlass(glass, @"LockScreenTime", label);
+        if (!blurView) {
+            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+            blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
+            blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            blurView.layer.cornerRadius = 12.0;
+            blurView.layer.cornerCurve = kCACornerCurveContinuous;
+            blurView.clipsToBounds = YES;
+            blurView.userInteractionEnabled = NO;
+            if (label.superview) {
+                [label.superview insertSubview:blurView belowSubview:label];
+            }
+            objc_setAssociatedObject(label, kLockTimeGlassKey, blurView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
-        glass.frame = label.frame;
-        glass.alpha = frostedOpacity;
-        glass.hidden = NO;
-    } else if (glass) {
-        glass.hidden = YES;
+        blurView.frame = label.frame;
+        blurView.alpha = frostedOpacity;
+        blurView.hidden = NO;
+    } else if (blurView) {
+        blurView.hidden = YES;
     }
 }
 
-// 使用 method swizzling 而不是 %hook，因为需要同时处理多个标签类
 @interface UILabel (LGLockTime)
 @end
 
@@ -125,9 +123,9 @@ static void applyLockTimeStyle(UILabel *label) {
     [self lg_lockTimeLayoutSubviews];
     if ([self isKindOfClass:[UILabel class]]) {
         UILabel *label = (UILabel *)self;
-        LGLiveBackdropView *glass = objc_getAssociatedObject(label, kLockTimeGlassKey);
-        if (glass && !glass.hidden) {
-            glass.frame = label.frame;
+        UIVisualEffectView *blurView = objc_getAssociatedObject(label, kLockTimeGlassKey);
+        if (blurView && !blurView.hidden) {
+            blurView.frame = label.frame;
         }
     }
 }

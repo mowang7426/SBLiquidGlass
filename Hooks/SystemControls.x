@@ -1,10 +1,9 @@
 #import <UIKit/UIKit.h>
-#import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGGlassKit.h"
 #import <objc/runtime.h>
 
-// 系统开关/滑条全局液态玻璃：在全系统所有 UISwitch / UISlider 上叠加玻璃背景。
-// 注意：这是 UIKit 级 hook，会影响所有进程（SpringBoard 内的设置、控制中心等）。
+// 系统开关/滑条全局玻璃：在全系统所有 UISwitch / UISlider 上叠加玻璃背景。
+// 使用 UIVisualEffectView + UIBlurEffect（UIKit 标准 API），避免 CABackdropLayer 私有类在非标准环境中崩溃。
 
 static void *kSystemSwitchGlassKey = &kSystemSwitchGlassKey;
 static void *kSystemSliderGlassKey = &kSystemSliderGlassKey;
@@ -13,6 +12,18 @@ static CGFloat lgPrefFloat(NSString *key, CGFloat fallback) {
     id v = LGGlassPreferenceValue(key);
     if ([v isKindOfClass:[NSNumber class]]) return [v floatValue];
     return fallback;
+}
+
+static UIVisualEffectView *lgMakeBlurView(CGRect frame, CGFloat cornerRadius) {
+    UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
+    blurView.frame = frame;
+    blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    blurView.layer.cornerRadius = cornerRadius;
+    blurView.layer.cornerCurve = kCACornerCurveContinuous;
+    blurView.clipsToBounds = YES;
+    blurView.userInteractionEnabled = NO;
+    return blurView;
 }
 
 #pragma mark - UISwitch
@@ -26,28 +37,22 @@ static CGFloat lgPrefFloat(NSString *key, CGFloat fallback) {
     [self lg_switchDidMoveToWindow]; // call original
     if (!lgHostEnabled(@"SystemSwitch")) return;
 
-    LGLiveBackdropView *glass = objc_getAssociatedObject(self, kSystemSwitchGlassKey);
-    if (!glass) {
-        glass = [[LGLiveBackdropView alloc] initWithFrame:self.bounds];
-        glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        glass.layer.cornerRadius = 16.0;
-        glass.layer.cornerCurve = kCACornerCurveContinuous;
-        glass.clipsToBounds = YES;
-        glass.userInteractionEnabled = NO;
-        [self insertSubview:glass atIndex:0];
-        objc_setAssociatedObject(self, kSystemSwitchGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        lgTrackGlass(glass, @"SystemSwitch", self);
+    UIVisualEffectView *blurView = objc_getAssociatedObject(self, kSystemSwitchGlassKey);
+    if (!blurView) {
+        blurView = lgMakeBlurView(self.bounds, 16.0);
+        [self insertSubview:blurView atIndex:0];
+        objc_setAssociatedObject(self, kSystemSwitchGlassKey, blurView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    glass.frame = self.bounds;
-    glass.hidden = !lgHostEnabled(@"SystemSwitch");
-    glass.alpha = lgPrefFloat(@"SystemSwitch.Opacity", 0.7);
+    blurView.frame = self.bounds;
+    blurView.hidden = !lgHostEnabled(@"SystemSwitch");
+    blurView.alpha = lgPrefFloat(@"SystemSwitch.Opacity", 0.7);
 }
 
 - (void)lg_switchLayoutSubviews {
     [self lg_switchLayoutSubviews];
-    LGLiveBackdropView *glass = objc_getAssociatedObject(self, kSystemSwitchGlassKey);
-    if (glass) {
-        glass.frame = self.bounds;
+    UIVisualEffectView *blurView = objc_getAssociatedObject(self, kSystemSwitchGlassKey);
+    if (blurView) {
+        blurView.frame = self.bounds;
     }
 }
 
@@ -78,35 +83,29 @@ static CGFloat lgPrefFloat(NSString *key, CGFloat fallback) {
     [self lg_sliderDidMoveToWindow];
     if (!lgHostEnabled(@"SystemSlider")) return;
 
-    LGLiveBackdropView *glass = objc_getAssociatedObject(self, kSystemSliderGlassKey);
-    if (!glass) {
-        // 滑条的玻璃背景放在 track 区域
+    UIVisualEffectView *blurView = objc_getAssociatedObject(self, kSystemSliderGlassKey);
+    if (!blurView) {
         CGFloat trackHeight = 4.0;
         CGRect trackFrame = CGRectMake(0, (self.bounds.size.height - trackHeight) / 2.0,
                                         self.bounds.size.width, trackHeight);
-        glass = [[LGLiveBackdropView alloc] initWithFrame:trackFrame];
-        glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
-        glass.layer.cornerRadius = trackHeight / 2.0;
-        glass.layer.cornerCurve = kCACornerCurveContinuous;
-        glass.clipsToBounds = YES;
-        glass.userInteractionEnabled = NO;
-        [self insertSubview:glass atIndex:0];
-        objc_setAssociatedObject(self, kSystemSliderGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        lgTrackGlass(glass, @"SystemSlider", self);
+        blurView = lgMakeBlurView(trackFrame, trackHeight / 2.0);
+        blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
+        [self insertSubview:blurView atIndex:0];
+        objc_setAssociatedObject(self, kSystemSliderGlassKey, blurView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     CGFloat trackHeight = 4.0;
-    glass.frame = CGRectMake(0, (self.bounds.size.height - trackHeight) / 2.0,
+    blurView.frame = CGRectMake(0, (self.bounds.size.height - trackHeight) / 2.0,
                               self.bounds.size.width, trackHeight);
-    glass.hidden = !lgHostEnabled(@"SystemSlider");
-    glass.alpha = lgPrefFloat(@"SystemSlider.Opacity", 0.6);
+    blurView.hidden = !lgHostEnabled(@"SystemSlider");
+    blurView.alpha = lgPrefFloat(@"SystemSlider.Opacity", 0.6);
 }
 
 - (void)lg_sliderLayoutSubviews {
     [self lg_sliderLayoutSubviews];
-    LGLiveBackdropView *glass = objc_getAssociatedObject(self, kSystemSliderGlassKey);
-    if (glass) {
+    UIVisualEffectView *blurView = objc_getAssociatedObject(self, kSystemSliderGlassKey);
+    if (blurView) {
         CGFloat trackHeight = 4.0;
-        glass.frame = CGRectMake(0, (self.bounds.size.height - trackHeight) / 2.0,
+        blurView.frame = CGRectMake(0, (self.bounds.size.height - trackHeight) / 2.0,
                                   self.bounds.size.width, trackHeight);
     }
 }
