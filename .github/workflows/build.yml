@@ -1,0 +1,93 @@
+name: Build SBLiquidGlass V1.0.0 Alpha 1
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      # ==========================================
+      # 1. Checkout
+      # ==========================================
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ==========================================
+      # 2. Install build tools
+      # ==========================================
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install make dpkg ldid xz
+
+      # ==========================================
+      # 3. Install RootHide Theos
+      # ==========================================
+      - name: Install RootHide Theos
+        run: |
+          git clone --depth=1 https://github.com/roothide/theos.git $HOME/theos
+
+      # ==========================================
+      # 4. Download iPhoneOS SDK
+      # ==========================================
+      - name: Install iPhoneOS SDK
+        run: |
+          mkdir -p $HOME/theos/sdks
+
+          curl -L \
+            -o /tmp/iPhoneOS16.5.sdk.tar.xz \
+            https://github.com/roothide/theos/releases/download/sdk/iPhoneOS16.5.sdk.tar.xz
+
+          tar -xJf \
+            /tmp/iPhoneOS16.5.sdk.tar.xz \
+            -C $HOME/theos/sdks
+
+      # ==========================================
+      # 5. Configure Theos
+      # ==========================================
+      - name: Configure Theos
+        run: |
+          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+          echo "THEOS_PACKAGE_SCHEME=roothide" >> $GITHUB_ENV
+
+      # ==========================================
+      # 6. Show environment
+      # ==========================================
+      - name: Check build environment
+        run: |
+          echo "THEOS=$THEOS"
+          echo "THEOS_PACKAGE_SCHEME=$THEOS_PACKAGE_SCHEME"
+          ls -la "$THEOS/sdks"
+          xcodebuild -version
+
+      # ==========================================
+      # 7. Build package
+      # ==========================================
+      - name: Build SBLiquidGlass
+        run: |
+          make clean
+          make package \
+            THEOS="$THEOS" \
+            THEOS_PACKAGE_SCHEME=roothide \
+            FINALPACKAGE=1
+
+      # ==========================================
+      # 8. Show generated packages
+      # ==========================================
+      - name: List packages
+        run: |
+          echo "========== Packages =========="
+          find packages -maxdepth 1 -type f -print
+          echo "=============================="
+
+      # ==========================================
+      # 9. Upload DEB
+      # ==========================================
+      - name: Upload DEB
+        uses: actions/upload-artifact@v4
+        with:
+          name: SBLiquidGlass-V1.0.0-Alpha1
+          path: packages/*.deb
+          if-no-files-found: error
