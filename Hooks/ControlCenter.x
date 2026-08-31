@@ -118,7 +118,12 @@ static UIColor *ccColorFromRGBAHex(NSString *hex, NSString *fallback) {
 }
 
 static UIColor *ccFullscreenDimColor(void) {
-    NSString *fallback = @"#00000033";
+    // 黑色背景开关：开启时返回纯黑色，关闭时返回透明
+    BOOL blackBackground = [LGGlassPreferenceValue(@"ControlCenter.BlackBackground") floatValue] > 0.5;
+    if (blackBackground) {
+        return [UIColor colorWithWhite:0.0 alpha:0.65];
+    }
+    NSString *fallback = @"#00000000";
     return ccColorFromRGBAHex(LG_prefString(@"ControlCenter.FullscreenBackdropDimColor", fallback), fallback);
 }
 
