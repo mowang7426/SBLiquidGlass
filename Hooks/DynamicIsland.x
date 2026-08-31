@@ -76,18 +76,8 @@ static void updateDynamicIslandGradient(LGLiveBackdropView *glass) {
     gradient.cornerRadius = glass.layer.cornerRadius;
 }
 
-// 隐藏灵动岛选项
-%hook SBSystemApertureWindow
-- (void)didMoveToWindow {
-    %orig;
-    BOOL hide = lgPrefFloat(@"DynamicIsland.Hide", 0.0) > 0.5;
-    if (hide && lgHostEnabled(@"DynamicIsland")) {
-        UIView *self_ = (UIView *)self;
-        self_.hidden = YES;
-        self_.alpha = 0.0;
-    }
-}
-%end
+// 注意：不 hook SBSystemApertureWindow，因为 iOS 17 中它与 SBStatusBarWindow 存在类别/子类关系，
+// hook 会影响状态栏窗口导致崩溃。隐藏灵动岛功能暂不实现。
 
 %ctor {
     // 走 LGRegisterMaterialHost 标准路径注入灵动岛玻璃
