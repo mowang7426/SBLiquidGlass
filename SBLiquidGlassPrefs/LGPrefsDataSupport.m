@@ -56,17 +56,12 @@ static NSArray<NSString *> *LGExportablePreferenceKeys(void) {
 }
 
 static NSBundle *LGActiveLocalizationBundle(void) {
-    NSString *languageCode = [LGPrefsUIStateDefaults() stringForKey:kLGPrefsLanguageKey];
+    // 直接使用简体中文，已去掉语言切换选项
     NSBundle *baseBundle = [NSBundle bundleForClass:[LGPRootListController class]];
-    if (!languageCode.length || [languageCode isEqualToString:@"en"]) {
-        return baseBundle;
-    }
-
-    NSString *bundlePath = [baseBundle pathForResource:languageCode ofType:@"lproj"];
+    NSString *bundlePath = [baseBundle pathForResource:@"zh-Hans" ofType:@"lproj"];
     if (!bundlePath.length) {
         return baseBundle;
     }
-
     NSBundle *localizedBundle = [NSBundle bundleWithPath:bundlePath];
     return localizedBundle ?: baseBundle;
 }
@@ -648,13 +643,12 @@ static NSArray<NSDictionary *> *LGControlCenterFullscreenBackdropItems(BOOL incl
                         LGLocalized(@"prefs.control_center.fullscreen_backdrop_blur_radius.subtitle"),
                         8.0, 0.0, 50.0, 1),
         @"ControlCenter.Enabled", @YES)];
-    [items addObject:LGSettingControlledByKey(@{
-        @"type": @"color",
-        @"key": @"ControlCenter.FullscreenBackdropDimColor",
-        @"title": LGLocalized(@"prefs.control_center.fullscreen_backdrop_dim_color.title"),
-        @"subtitle": LGLocalized(@"prefs.control_center.fullscreen_backdrop_dim_color.subtitle"),
-        @"default": @"#00000033"
-    }, @"ControlCenter.Enabled", @YES)];
+    [items addObject:LGSettingControlledByKey(
+        LGSwitchSetting(@"ControlCenter.BlackBackground",
+                        LGLocalized(@"prefs.control_center.black_background.title"),
+                        LGLocalized(@"prefs.control_center.black_background.subtitle"),
+                        NO),
+        @"ControlCenter.Enabled", @YES)];
     return [items copy];
 }
 
@@ -804,11 +798,6 @@ NSArray<NSDictionary *> *LGAllSurfaceItems(void) {
 
 NSArray<NSDictionary *> *LGPrefsSettingsItems(void) {
     return @[
-        LGMenuSetting(kLGPrefsLanguageKey,
-                      LGLocalized(@"prefs.misc.language.title"),
-                      @"",
-                      @"en",
-                      LGAvailableLanguageChoices()),
         LGSpacerSetting(2.0, 0.0),
         LGAboutContentSetting(),
     ];
@@ -977,15 +966,7 @@ NSArray<NSDictionary *> *LGAppearanceSettingsItems(void) {
         LGSwitchSetting(@"Global.IconHighlight",
                         LGLocalized(@"prefs.settings.appearance.icon_highlight.title"),
                         LGLocalized(@"prefs.settings.appearance.icon_highlight.subtitle"), YES),
-        LGMenuSetting(@"LGPrefsLanguage",
-                      LGLocalized(@"prefs.settings.appearance.language.title"),
-                      LGLocalized(@"prefs.settings.appearance.language.subtitle"),
-                      @"en",
-                      @[
-                          @{@"value": @"en", @"title": @"English"},
-                          @{@"value": @"zh-Hans", @"title": @"简体中文"},
-                          @{@"value": @"zh-Hant-TW", @"title": @"繁體中文"},
-                      ]),
+
     ];
 }
 
