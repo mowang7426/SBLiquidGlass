@@ -250,3 +250,63 @@
 "prefs.settings.data.import.subtitle" = "Import a saved settings file.";
 "prefs.settings.data.reset.title" = "Reset All Settings";
 "prefs.settings.data.reset.subtitle" = "Restore the default settings.";
+
+// ---- V1.1.0 new features ----
+"prefs.overview.toggle.dynamic_island" = "Dynamic Island";
+"prefs.overview.toggle.dynamic_island.subtitle" = "Liquid Glass effect for the Dynamic Island.";
+"prefs.overview.toggle.system_switch" = "System Switches";
+"prefs.overview.toggle.system_switch.subtitle" = "Liquid Glass effect for all system toggles.";
+"prefs.overview.toggle.system_slider" = "System Sliders";
+"prefs.overview.toggle.system_slider.subtitle" = "Liquid Glass effect for all system sliders.";
+"prefs.overview.toggle.lock_time" = "Lock Screen Time";
+"prefs.overview.toggle.lock_time.subtitle" = "Custom styling for lock screen time.";
+"prefs.overview.toggle.external_plugins" = "External Plugins";
+"prefs.overview.toggle.external_plugins.subtitle" = "Liquid Glass for third-party tweak UIs.";
+
+"prefs.di.title" = "Dynamic Island";
+"prefs.di.subtitle" = "Customize the Dynamic Island glass effect.";
+"prefs.di.gradient_shadow.title" = "Gradient Shadow";
+"prefs.di.gradient_shadow.subtitle" = "Apply a 5-color gradient glow to the Dynamic Island.";
+"prefs.di.gradient_opacity.title" = "Gradient Opacity";
+"prefs.di.gradient_opacity.subtitle" = "Opacity of the gradient shadow overlay.";
+"prefs.di.gradient1.title" = "Gradient Color 1";
+"prefs.di.gradient1.subtitle" = "First color of the Dynamic Island gradient.";
+"prefs.di.gradient2.title" = "Gradient Color 2";
+"prefs.di.gradient2.subtitle" = "Second color of the Dynamic Island gradient.";
+"prefs.di.gradient3.title" = "Gradient Color 3";
+"prefs.di.gradient3.subtitle" = "Third color of the Dynamic Island gradient.";
+"prefs.di.gradient4.title" = "Gradient Color 4";
+"prefs.di.gradient4.subtitle" = "Fourth color of the Dynamic Island gradient.";
+"prefs.di.gradient5.title" = "Gradient Color 5";
+"prefs.di.gradient5.subtitle" = "Fifth color of the Dynamic Island gradient.";
+"prefs.di.hide.title" = "Hide Dynamic Island";
+"prefs.di.hide.subtitle" = "Completely hide the Dynamic Island.";
+
+"prefs.locktime.title" = "Lock Screen Time";
+"prefs.locktime.subtitle" = "Customize the lock screen time font and glass.";
+"prefs.locktime.font_size.title" = "Font Size Scale";
+"prefs.locktime.font_size.subtitle" = "Scale the lock screen time font size.";
+"prefs.locktime.frosted.title" = "Frosted Glass Opacity";
+"prefs.locktime.frosted.subtitle" = "Opacity of the frosted glass background behind the time.";
+"prefs.locktime.blur.title" = "Blur Radius";
+"prefs.locktime.blur.subtitle" = "Blur radius of the time background.";
+
+"prefs.kb.title" = "Keyboard";
+"prefs.kb.subtitle" = "Custom keyboard background and appearance.";
+"prefs.kb.bg_opacity.title" = "Background Opacity";
+"prefs.kb.bg_opacity.subtitle" = "Opacity of the custom keyboard background.";
+"prefs.kb.corner_radius.title" = "Corner Radius";
+"prefs.kb.corner_radius.subtitle" = "Corner radius of the keyboard glass.";
+"prefs.kb.force_dark.title" = "Force Dark Mode";
+"prefs.kb.force_dark.subtitle" = "Force the keyboard to use dark appearance.";
+
+"prefs.folder.title" = "Folder Icon";
+"prefs.folder.subtitle" = "Customize the closed folder icon glass.";
+"prefs.folder.corner_radius.title" = "Corner Radius";
+"prefs.folder.corner_radius.subtitle" = "Custom corner radius (-1 = default).";
+
+"prefs.exclusion.title" = "Per-App Exclusion";
+"prefs.exclusion.subtitle" = "Disable Liquid Glass for specific apps.";
+"prefs.exclusion.apps.title" = "Excluded Bundle IDs";
+"prefs.exclusion.apps.subtitle" = "Comma-separated list of app bundle IDs to exclude.";
+"prefs.exclusion.placeholder" = "e.g. com.apple.mobilesafari, com.google.ios.youtube";
