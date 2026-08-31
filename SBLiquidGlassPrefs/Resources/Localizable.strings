@@ -230,6 +230,8 @@
 "prefs.settings.appearance.dark_enhance.subtitle" = "Strengthen glass contrast in dark mode.";
 "prefs.settings.appearance.icon_highlight.title" = "Icon Highlights";
 "prefs.settings.appearance.icon_highlight.subtitle" = "Add a soft highlight to icons.";
+"prefs.settings.appearance.language.title" = "Language";
+"prefs.settings.appearance.language.subtitle" = "Switch the settings interface language.";
 "prefs.settings.performance.title" = "Performance & Optimization";
 "prefs.settings.performance.mode.title" = "Performance Mode";
 "prefs.settings.performance.mode.balanced" = "Balanced";
