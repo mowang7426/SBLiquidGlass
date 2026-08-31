@@ -268,3 +268,10 @@
 "prefs.keyboard.custom_background.subtitle" = "使用自定义图片作为键盘背景。";
 "prefs.keyboard.background_path.title" = "背景路径";
 "prefs.keyboard.background_path.subtitle" = "输入自定义背景图片的文件路径。";
+
+"prefs.widgets.title" = "小组件";
+"prefs.widgets.subtitle" = "控制负一屏和小组件的模糊效果。";
+"prefs.widgets.today_blur.title" = "负一屏模糊";
+"prefs.widgets.today_blur.subtitle" = "启用负一屏（Today 视图）的背景模糊效果。";
+"prefs.widgets.app_exclusion.title" = "为应用禁用液态玻璃";
+"prefs.widgets.app_exclusion.subtitle" = "在指定应用中禁用所有液态玻璃效果。";
