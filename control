@@ -1,0 +1,9 @@
+Package: dylv.sbliquidglass
+Name: SBLiquidGlass
+Version: 1.0.0-alpha1
+Architecture: iphoneos-arm
+Description: A staged Liquid Glass system UI tweak with a safe surface architecture.
+Maintainer: SBLiquidGlass
+Author: SBLiquidGlass
+Section: Tweaks
+Depends: mobilesubstrate (>= 0.9.5000), firmware (>= 14.0), firmware (<< 26.0), preferenceloader
