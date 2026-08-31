@@ -421,7 +421,7 @@ NSArray<NSDictionary *> *LGRendererItemsForHostPrefix(NSString *prefix) {
     };
     NSString *lightTint = [NSString stringWithUTF8String:host->lightTintHex];
     NSString *darkTint = [NSString stringWithUTF8String:host->darkTintHex];
-    BOOL enabledByDefault = ![prefix isEqualToString:@"AppIcons"];
+    BOOL enabledByDefault = YES;
     return @[
         LGGlassEnabledSetting(key(@"Enabled"), enabledByDefault),
         LGSliderSetting(key(@"BezelRatio"), LGLocalized(@"prefs.control.bezel_ratio"),
