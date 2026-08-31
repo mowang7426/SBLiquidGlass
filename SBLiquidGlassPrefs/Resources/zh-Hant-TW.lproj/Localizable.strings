@@ -247,3 +247,6 @@
 "prefs.notification.background_adaptive" = "背景自適應";
 "prefs.notification.background_adaptive.subtitle" = "根據深淺色模式自動調整背景色調，增強文字可讀性。";
 "prefs.app_library.subtitle" = "分別控制 App 資源庫裡的分類卡片和搜尋欄。";
+
+"prefs.control_center.black_background.title" = "黑色背景";
+"prefs.control_center.black_background.subtitle" = "開啟後控制中心背景變為純黑色。";
