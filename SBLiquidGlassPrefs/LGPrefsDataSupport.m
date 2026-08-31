@@ -901,6 +901,21 @@ NSArray<NSDictionary *> *LGOverviewToggleItems(void) {
         LGSwitchSetting(@"Keyboard.Enabled",
                         LGLocalized(@"prefs.overview.toggle.keyboard"),
                         LGLocalized(@"prefs.overview.toggle.keyboard.subtitle"), NO),
+        LGSwitchSetting(@"DynamicIsland.Enabled",
+                        LGLocalized(@"prefs.overview.toggle.dynamic_island"),
+                        LGLocalized(@"prefs.overview.toggle.dynamic_island.subtitle"), NO),
+        LGSwitchSetting(@"SystemSwitch.Enabled",
+                        LGLocalized(@"prefs.overview.toggle.system_switch"),
+                        LGLocalized(@"prefs.overview.toggle.system_switch.subtitle"), NO),
+        LGSwitchSetting(@"SystemSlider.Enabled",
+                        LGLocalized(@"prefs.overview.toggle.system_slider"),
+                        LGLocalized(@"prefs.overview.toggle.system_slider.subtitle"), NO),
+        LGSwitchSetting(@"LockScreenTime.Enabled",
+                        LGLocalized(@"prefs.overview.toggle.lock_time"),
+                        LGLocalized(@"prefs.overview.toggle.lock_time.subtitle"), NO),
+        LGSwitchSetting(@"ExternalPlugins.Enabled",
+                        LGLocalized(@"prefs.overview.toggle.external_plugins"),
+                        LGLocalized(@"prefs.overview.toggle.external_plugins.subtitle"), NO),
     ];
 }
 
@@ -1030,6 +1045,97 @@ NSArray<NSDictionary *> *LGDataSettingsItems(void) {
         LGNavSetting(LGLocalized(@"prefs.settings.data.reset.title"),
                      LGLocalized(@"prefs.settings.data.reset.subtitle"),
                      @"handleResetAllPressed"),
+    ];
+}
+
+// 玻璃效果 · 灵动岛详细设置
+NSArray<NSDictionary *> *LGDynamicIslandSettingsItems(void) {
+    return @[
+        LGSwitchSetting(@"DynamicIsland.GradientShadow",
+                        LGLocalized(@"prefs.di.gradient_shadow.title"),
+                        LGLocalized(@"prefs.di.gradient_shadow.subtitle"), YES),
+        LGSliderSetting(@"DynamicIsland.GradientOpacity",
+                        LGLocalized(@"prefs.di.gradient_opacity.title"),
+                        LGLocalized(@"prefs.di.gradient_opacity.subtitle"),
+                        0.35, 0.0, 1.0, 2),
+        @{ @"type": @"color", @"key": @"DynamicIsland.GradientColor1",
+           @"title": LGLocalized(@"prefs.di.gradient1.title"),
+           @"subtitle": LGLocalized(@"prefs.di.gradient1.subtitle"),
+           @"default": @"#FAFDFF" },
+        @{ @"type": @"color", @"key": @"DynamicIsland.GradientColor2",
+           @"title": LGLocalized(@"prefs.di.gradient2.title"),
+           @"subtitle": LGLocalized(@"prefs.di.gradient2.subtitle"),
+           @"default": @"#B8E8FF" },
+        @{ @"type": @"color", @"key": @"DynamicIsland.GradientColor3",
+           @"title": LGLocalized(@"prefs.di.gradient3.title"),
+           @"subtitle": LGLocalized(@"prefs.di.gradient3.subtitle"),
+           @"default": @"#9EB3FF" },
+        @{ @"type": @"color", @"key": @"DynamicIsland.GradientColor4",
+           @"title": LGLocalized(@"prefs.di.gradient4.title"),
+           @"subtitle": LGLocalized(@"prefs.di.gradient4.subtitle"),
+           @"default": @"#D1ABFF" },
+        @{ @"type": @"color", @"key": @"DynamicIsland.GradientColor5",
+           @"title": LGLocalized(@"prefs.di.gradient5.title"),
+           @"subtitle": LGLocalized(@"prefs.di.gradient5.subtitle"),
+           @"default": @"#FFC7F0" },
+        LGSwitchSetting(@"DynamicIsland.Hide",
+                        LGLocalized(@"prefs.di.hide.title"),
+                        LGLocalized(@"prefs.di.hide.subtitle"), NO),
+    ];
+}
+
+// 玻璃效果 · 锁屏时间详细设置
+NSArray<NSDictionary *> *LGLockScreenTimeSettingsItems(void) {
+    return @[
+        LGSliderSetting(@"LockScreenTime.FontSizeScale",
+                        LGLocalized(@"prefs.locktime.font_size.title"),
+                        LGLocalized(@"prefs.locktime.font_size.subtitle"),
+                        1.0, 0.5, 3.5, 2),
+        LGSliderSetting(@"LockScreenTime.FrostedGlassOpacity",
+                        LGLocalized(@"prefs.locktime.frosted.title"),
+                        LGLocalized(@"prefs.locktime.frosted.subtitle"),
+                        0.0, 0.0, 1.0, 2),
+        LGSliderSetting(@"LockScreenTime.BlurRadius",
+                        LGLocalized(@"prefs.locktime.blur.title"),
+                        LGLocalized(@"prefs.locktime.blur.subtitle"),
+                        5.0, 0.0, 20.0, 1),
+    ];
+}
+
+// 玻璃效果 · 键盘增强设置
+NSArray<NSDictionary *> *LGKeyboardExtrasSettingsItems(void) {
+    return @[
+        LGSliderSetting(@"Keyboard.BackgroundOpacity",
+                        LGLocalized(@"prefs.kb.bg_opacity.title"),
+                        LGLocalized(@"prefs.kb.bg_opacity.subtitle"),
+                        0.7, 0.0, 1.0, 2),
+        LGSliderSetting(@"Keyboard.CornerRadius",
+                        LGLocalized(@"prefs.kb.corner_radius.title"),
+                        LGLocalized(@"prefs.kb.corner_radius.subtitle"),
+                        30.0, 0.0, 60.0, 1),
+        LGSwitchSetting(@"Keyboard.ForceDarkMode",
+                        LGLocalized(@"prefs.kb.force_dark.title"),
+                        LGLocalized(@"prefs.kb.force_dark.subtitle"), NO),
+    ];
+}
+
+// 玻璃效果 · 文件夹图标设置
+NSArray<NSDictionary *> *LGFolderIconExtrasSettingsItems(void) {
+    return @[
+        LGSliderSetting(@"FolderIcon.CornerRadius",
+                        LGLocalized(@"prefs.folder.corner_radius.title"),
+                        LGLocalized(@"prefs.folder.corner_radius.subtitle"),
+                        -1.0, -1.0, 30.0, 1),
+    ];
+}
+
+// 设置 · 按应用禁用
+NSArray<NSDictionary *> *LGPerAppExclusionSettingsItems(void) {
+    return @[
+        @{ @"type": @"text", @"key": @"Global.ExcludedAppBundleIDs",
+           @"title": LGLocalized(@"prefs.exclusion.apps.title"),
+           @"subtitle": LGLocalized(@"prefs.exclusion.apps.subtitle"),
+           @"default": @"" },
     ];
 }
 

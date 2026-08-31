@@ -641,6 +641,50 @@ static NSString * const kLGRuntimeCacheUsageBytesKey = @"__runtime_cache_usage_b
     return button;
 }
 
+- (UIView *)lgTextBodyForItem:(NSDictionary *)item {
+    UIView *body = [[UIView alloc] initWithFrame:CGRectZero];
+    UIStackView *stack = [[UIStackView alloc] initWithFrame:CGRectZero];
+    stack.axis = UILayoutConstraintAxisVertical;
+    stack.spacing = 9.0;
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    [body addSubview:stack];
+
+    NSString *key = item[@"key"];
+    NSString *fallback = item[@"default"] ?: @"";
+    id stored = LGReadPreferenceObject(key, fallback);
+    NSString *currentText = [stored isKindOfClass:[NSString class]] ? stored : fallback;
+
+    UITextField *textField = [[UITextField alloc] initWithFrame:CGRectZero];
+    textField.translatesAutoresizingMaskIntoConstraints = NO;
+    textField.text = currentText;
+    textField.placeholder = LGLocalized(@"prefs.exclusion.placeholder");
+    textField.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightMedium];
+    textField.borderStyle = UITextBorderStyleRoundedRect;
+    textField.autocorrectionType = UITextAutocorrectionTypeNo;
+    textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    textField.keyboardType = UIKeyboardTypeEmailAddress;
+    textField.accessibilityIdentifier = key;
+    [textField.heightAnchor constraintEqualToConstant:36.0].active = YES;
+
+    [textField addTarget:self action:@selector(handleTextFieldChanged:) forControlEvents:UIControlEventEditingDidEnd];
+
+    UILabel *titleLabel = [self lgControlTitleLabel:item[@"title"]];
+    [stack addArrangedSubview:[self lgHeaderRowWithTitle:titleLabel accessoryViews:@[] spacing:12.0]];
+    [stack addArrangedSubview:textField];
+    NSString *subtitle = item[@"subtitle"];
+    if (subtitle.length) {
+        [stack addArrangedSubview:[self lgControlSubtitleLabel:subtitle]];
+    }
+
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.topAnchor constraintEqualToAnchor:body.topAnchor constant:13.0],
+        [stack.leadingAnchor constraintEqualToAnchor:body.leadingAnchor constant:14.0],
+        [stack.trailingAnchor constraintEqualToAnchor:body.trailingAnchor constant:-14.0],
+        [stack.bottomAnchor constraintEqualToAnchor:body.bottomAnchor constant:-13.0],
+    ]];
+    return body;
+}
+
 - (UIView *)lgBodyForItem:(NSDictionary *)item {
     NSString *type = item[@"type"];
     if ([type isEqualToString:@"switch"]) {
@@ -654,6 +698,9 @@ static NSString * const kLGRuntimeCacheUsageBytesKey = @"__runtime_cache_usage_b
     }
     if ([type isEqualToString:@"menu"]) {
         return [self lgMenuBodyForItem:item];
+    }
+    if ([type isEqualToString:@"text"]) {
+        return [self lgTextBodyForItem:item];
     }
     return [self lgNavBodyForItem:item];
 }
@@ -931,12 +978,39 @@ static NSString * const kLGRuntimeCacheUsageBytesKey = @"__runtime_cache_usage_b
     [_lg_glassStack addArrangedSubview:[self lgSectionViewWithTitle:LGLocalized(@"prefs.glass.colors.title")
                                                            subtitle:LGLocalized(@"prefs.glass.colors.subtitle")]];
     [_lg_glassStack addArrangedSubview:[self lgGroupedCardForItems:LGGlobalColorTuningItems()]];
+
+    // 灵动岛
+    [_lg_glassStack addArrangedSubview:[self lgSectionViewWithTitle:LGLocalized(@"prefs.di.title")
+                                                           subtitle:LGLocalized(@"prefs.di.subtitle")]];
+    [_lg_glassStack addArrangedSubview:[self lgGroupedCardForItems:LGDynamicIslandSettingsItems()]];
+
+    // 锁屏时间
+    [_lg_glassStack addArrangedSubview:[self lgSectionViewWithTitle:LGLocalized(@"prefs.locktime.title")
+                                                           subtitle:LGLocalized(@"prefs.locktime.subtitle")]];
+    [_lg_glassStack addArrangedSubview:[self lgGroupedCardForItems:LGLockScreenTimeSettingsItems()]];
+
+    // 键盘增强
+    [_lg_glassStack addArrangedSubview:[self lgSectionViewWithTitle:LGLocalized(@"prefs.kb.title")
+                                                           subtitle:LGLocalized(@"prefs.kb.subtitle")]];
+    [_lg_glassStack addArrangedSubview:[self lgGroupedCardForItems:LGKeyboardExtrasSettingsItems()]];
+
+    // 文件夹图标
+    [_lg_glassStack addArrangedSubview:[self lgSectionViewWithTitle:LGLocalized(@"prefs.folder.title")
+                                                           subtitle:LGLocalized(@"prefs.folder.subtitle")]];
+    [_lg_glassStack addArrangedSubview:[self lgGroupedCardForItems:LGFolderIconExtrasSettingsItems()]];
 }
 
 - (void)handleGlassResetPressed {
     LGPresentResetConfirmationWithBody(self,
         [NSString stringWithFormat:LGLocalized(@"prefs.reset_confirm.surface_body_format"), LGLocalized(@"prefs.glass.title")],
         @selector(performAnimatedGlassReset));
+}
+
+- (void)handleTextFieldChanged:(UITextField *)textField {
+    NSString *key = textField.accessibilityIdentifier;
+    if (!key.length) return;
+    LGWritePreferenceObject(key, textField.text ?: @"");
+    [self updateRespringBarAnimated:YES];
 }
 
 - (void)performAnimatedGlassReset {
@@ -977,6 +1051,9 @@ static NSString * const kLGRuntimeCacheUsageBytesKey = @"__runtime_cache_usage_b
 
     [_lg_settingsStack addArrangedSubview:[self lgSectionViewWithTitle:LGLocalized(@"prefs.settings.data.title") subtitle:nil]];
     [_lg_settingsStack addArrangedSubview:[self lgGroupedCardForItems:LGDataSettingsItems()]];
+
+    [_lg_settingsStack addArrangedSubview:[self lgSectionViewWithTitle:LGLocalized(@"prefs.exclusion.title") subtitle:LGLocalized(@"prefs.exclusion.subtitle")]];
+    [_lg_settingsStack addArrangedSubview:[self lgGroupedCardForItems:LGPerAppExclusionSettingsItems()]];
 }
 
 #pragma mark - Preferences helpers
