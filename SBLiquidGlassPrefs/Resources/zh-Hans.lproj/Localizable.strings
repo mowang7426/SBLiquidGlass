@@ -248,3 +248,6 @@
 "prefs.notification.background_adaptive" = "背景自适应";
 "prefs.notification.background_adaptive.subtitle" = "根据深浅色模式自动调整背景色调，增强文字可读性。";
 "prefs.app_library.subtitle" = "分别控制 App 资源库里的分类卡片和搜索栏。";
+
+"prefs.control_center.black_background.title" = "黑色背景";
+"prefs.control_center.black_background.subtitle" = "开启后控制中心背景变为纯黑色。";
