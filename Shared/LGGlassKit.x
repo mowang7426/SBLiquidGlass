@@ -25,8 +25,44 @@ BOOL isExactClass(UIView *v, NSString *name) {
 
 #pragma mark - per-host enable prefs
 
+// 为应用禁用液态玻璃：检查当前前台应用是否在排除列表中
+static BOOL LGIsAppExcludedFromGlass(void) {
+    @try {
+        NSString *mainBundleID = NSBundle.mainBundle.bundleIdentifier;
+        if (![mainBundleID isEqualToString:@"com.apple.springboard"]) return NO;
+
+        id exclusions = LGGlassPreferenceValue(@"GlobalControls.Exclusions");
+        NSString *exclusionText = [exclusions isKindOfClass:NSString.class] ? (NSString *)exclusions : @"";
+        if (!exclusionText.length) return NO;
+
+        Class workspaceClass = NSClassFromString(@"SBMainWorkspace");
+        if (!workspaceClass) return NO;
+
+        id workspace = [workspaceClass performSelector:@selector(sharedInstance)];
+        if (!workspace) return NO;
+
+        id activeApplication = [workspace valueForKey:@"activeApplication"];
+        if (!activeApplication) return NO;
+
+        NSString *bundleID = [activeApplication valueForKey:@"bundleIdentifier"];
+        if (!bundleID.length) return NO;
+
+        NSCharacterSet *separators = [NSCharacterSet characterSetWithCharactersInString:@",
+;"];
+        for (NSString *rawEntry in [exclusionText componentsSeparatedByCharactersInSet:separators]) {
+            NSString *entry = [rawEntry stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].lowercaseString;
+            if (entry.length && [entry isEqualToString:bundleID.lowercaseString]) {
+                return YES;
+            }
+        }
+    } @catch (__unused NSException *e) {}
+    return NO;
+}
+
 BOOL lgHostEnabled(NSString *prefix) {
     if (!prefix.length) return NO;
+
+    if (LGIsAppExcludedFromGlass()) return NO;
 
     // Alpha 1 safety policy: only Dock is enabled by default.
     // Every other surface requires an explicit per-surface preference.
