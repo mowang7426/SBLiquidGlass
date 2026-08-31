@@ -47,8 +47,7 @@ static BOOL LGIsAppExcludedFromGlass(void) {
         NSString *bundleID = [activeApplication valueForKey:@"bundleIdentifier"];
         if (!bundleID.length) return NO;
 
-        NSCharacterSet *separators = [NSCharacterSet characterSetWithCharactersInString:@",
-;"];
+        NSCharacterSet *separators = [NSCharacterSet characterSetWithCharactersInString:@",\n;"];
         for (NSString *rawEntry in [exclusionText componentsSeparatedByCharactersInSet:separators]) {
             NSString *entry = [rawEntry stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].lowercaseString;
             if (entry.length && [entry isEqualToString:bundleID.lowercaseString]) {
