@@ -48,6 +48,8 @@ static BOOL gLGKeyboardPredictionStateKnown;
 static BOOL gLGKeyboardHasPredictionStrip;
 static __thread NSUInteger gLGKeyboardSizingDepth;
 static const void *kLGKeyboardGlassKey = &kLGKeyboardGlassKey;
+static const void *kLGKeyboardDarkOverlayKey = &kLGKeyboardDarkOverlayKey;
+static const void *kLGKeyboardCustomBgKey = &kLGKeyboardCustomBgKey;
 static const void *kLGKeyboardSuppressingHiddenKey =
     &kLGKeyboardSuppressingHiddenKey;
 static const void *kLGKeyboardRequestedHiddenKey =
@@ -687,6 +689,53 @@ static void LGUpdateKeyboardGlass(UIView *stock) {
         glass.layer.cornerCurve = kCACornerCurveContinuous;
     }
     LGUpdateKeyboardBorder(glass);
+
+    // 强制暗色模式
+    @try {
+        BOOL forceDark = [LGGlassPreferenceValue(@"Keyboard.ForceDarkMode") floatValue] > 0.5;
+        UIView *darkOverlay = objc_getAssociatedObject(glass, kLGKeyboardDarkOverlayKey);
+        if (forceDark) {
+            if (!darkOverlay) {
+                darkOverlay = [[UIView alloc] initWithFrame:glass.bounds];
+                darkOverlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+                darkOverlay.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.55];
+                darkOverlay.userInteractionEnabled = NO;
+                [glass addSubview:darkOverlay];
+                objc_setAssociatedObject(glass, kLGKeyboardDarkOverlayKey, darkOverlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            }
+            darkOverlay.hidden = NO;
+            [glass bringSubviewToFront:darkOverlay];
+        } else if (darkOverlay) {
+            darkOverlay.hidden = YES;
+        }
+    } @catch (__unused NSException *e) {}
+
+    // 自定义背景
+    @try {
+        BOOL customBg = [LGGlassPreferenceValue(@"Keyboard.CustomBackground") floatValue] > 0.5;
+        NSString *bgPath = [LGGlassPreferenceValue(@"Keyboard.CustomBackgroundPath") isKindOfClass:NSString.class]
+            ? (NSString *)[LGGlassPreferenceValue(@"Keyboard.CustomBackgroundPath")]
+            : @"";
+        UIImageView *bgView = objc_getAssociatedObject(glass, kLGKeyboardCustomBgKey);
+        if (customBg && bgPath.length && [[NSFileManager defaultManager] fileExistsAtPath:bgPath]) {
+            UIImage *bgImage = [UIImage imageWithContentsOfFile:bgPath];
+            if (bgImage) {
+                if (!bgView) {
+                    bgView = [[UIImageView alloc] initWithFrame:glass.bounds];
+                    bgView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+                    bgView.contentMode = UIViewContentModeScaleAspectFill;
+                    bgView.clipsToBounds = YES;
+                    bgView.userInteractionEnabled = NO;
+                    [glass insertSubview:bgView atIndex:0];
+                    objc_setAssociatedObject(glass, kLGKeyboardCustomBgKey, bgView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                }
+                bgView.image = bgImage;
+                bgView.hidden = NO;
+            }
+        } else if (bgView) {
+            bgView.hidden = YES;
+        }
+    } @catch (__unused NSException *e) {}
     glass.alpha = primary.alpha;
     glass.hidden =
         [objc_getAssociatedObject(primary, kLGKeyboardRequestedHiddenKey)
