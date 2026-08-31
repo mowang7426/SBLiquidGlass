@@ -1,4 +1,5 @@
 #import <UIKit/UIKit.h>
+#import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGGlassKit.h"
 #import <objc/runtime.h>
 #import <CoreText/CoreText.h>
