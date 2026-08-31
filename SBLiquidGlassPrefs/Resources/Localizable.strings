@@ -1,5 +1,4 @@
 "prefs.app_name" = "SBLiquidGlass";
-
 "prefs.control.enabled" = "Enabled";
 "prefs.control.bezel_ratio" = "Bezel Ratio";
 "prefs.control.blur" = "Blur";
@@ -21,7 +20,6 @@
 "prefs.control.variable_font_softness" = "Softness";
 "prefs.control.motion_highlights" = "Motion Highlights";
 "prefs.control.motion_highlights_sensitivity" = "Motion Sensitivity";
-
 "prefs.subtitle.enabled" = "Turn this glass view on or off.";
 "prefs.subtitle.bezel_ratio" = "Width of the refracting edge relative to the glass view's short side.";
 "prefs.subtitle.blur" = "Softness of the glass view.";
@@ -45,7 +43,6 @@
 "prefs.subtitle.variable_font_softness" = "Softness axis value for the iOS 26 clock font.";
 "prefs.subtitle.global_enabled" = "Master switch for every surface.";
 "prefs.root.runtime_cache_footer" = "%@ cached to RAM";
-
 "prefs.section.dock.title" = "Dock";
 "prefs.section.folder_icons.title" = "Folder Icons";
 "prefs.section.folder_open.title" = "Folder Open";
@@ -63,7 +60,6 @@
 "prefs.section.misc.title" = "Miscellaneous";
 "prefs.section.motion_highlights.title" = "Motion Highlights";
 "prefs.section.motion_highlights.subtitle" = "Use device motion to steer glass specular highlights.";
-
 "prefs.button.reset" = "Reset";
 "prefs.button.cancel" = "Cancel";
 "prefs.app_icons_warning.title" = "Enable App Icons?";
@@ -76,7 +72,6 @@
 "prefs.button.ok" = "OK";
 "prefs.button.go_to_top" = "Go to top";
 "prefs.button.apply" = "Apply";
-
 "prefs.reset_confirm.title" = "Confirm Reset?";
 "prefs.reset_confirm.body" = "This action will reset all preferences to their defaults. Do you wish to continue?";
 "prefs.reset_confirm.surface_body_format" = "This will reset all of %@ to their defaults. Do you want to continue?";
@@ -95,7 +90,6 @@
 "prefs.jump_to.title" = "Jump To";
 "prefs.value_prompt.title" = "Set Value";
 "prefs.value_prompt.message" = "Enter a value.";
-
 "prefs.hero.eyebrow" = "Simpler, Brand-New UI";
 "prefs.hero.subtitle" = "V1.1.0 Alpha2 · Liquid Glass, Reimagined";
 "prefs.surface.homescreen.title" = "Homescreen";
@@ -163,13 +157,11 @@
 "prefs.global_controls.sliders.subtitle" = "Replace standard sliders with liquid sliders.";
 "prefs.global_controls.segmented.title" = "Segmented Controls";
 "prefs.global_controls.segmented.subtitle" = "Add liquid selection behavior to segmented controls.";
-
 "prefs.section.keyboard_geometry.title" = "Keyboard Geometry";
 "prefs.section.keyboard_geometry.subtitle" = "Shape and spacing for the keyboard glass.";
 "prefs.control.keyboard_overhang" = "Overhang";
 "prefs.subtitle.keyboard_overhang" = "Extra height reserved above the keyboard when the prediction bar is hidden.";
-
-/* V1.1.0 redesigned tabs */
+/* V1.1.0 redesigned tabs */;
 "prefs.hero.highlight.1" = "Brand-New Simple Design";
 "prefs.hero.highlight.2" = "Liquid Glass Aesthetic";
 "prefs.hero.highlight.3" = "Silky-Smooth Interactions";
@@ -250,8 +242,6 @@
 "prefs.settings.data.import.subtitle" = "Import a saved settings file.";
 "prefs.settings.data.reset.title" = "Reset All Settings";
 "prefs.settings.data.reset.subtitle" = "Restore the default settings.";
-
 "prefs.notification.background_adaptive" = "Background Adaptive";
 "prefs.notification.background_adaptive.subtitle" = "Adjusts background tint automatically for better text readability.";
-
 "prefs.app_library.subtitle" = "Separately control category pods and search field in App Library.";
