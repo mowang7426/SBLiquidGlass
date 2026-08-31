@@ -98,6 +98,13 @@ typedef struct {
     float       dispersionStrength;
     float       fresnelGlareStrength;
     simd_float4 tintColor;
+    // V1.1.0 global glass tuning (must stay in sync with MSL Uniforms)
+    simd_float4 glassTint;
+    simd_float4 gradientColor1;
+    simd_float4 gradientColor2;
+    simd_float4 gradientColor3;
+    simd_float4 gradientColor4;
+    float       gradientMix;
 } LGUniforms;
 
 typedef void (*Render13Fn)(void*,
@@ -227,7 +234,23 @@ struct Uniforms {
     float  dispersionStrength;
     float  fresnelGlareStrength;
     float4 tintColor;
+    float4 glassTint;
+    float4 gradientColor1;
+    float4 gradientColor2;
+    float4 gradientColor3;
+    float4 gradientColor4;
+    float  gradientMix;
 };
+// V1.1.0: overlay the global glass tint + a diagonal 4-stop gradient on the result.
+static inline float3 lgApplyGlassGlobals(float3 rgb, constant Uniforms &u,
+                                         uint2 gid, uint2 dimensions) {
+    rgb = mix(rgb, u.glassTint.rgb, u.glassTint.a);
+    float2 gp = (float2(gid) + 0.5) / float2(max(dimensions, uint2(1u)));
+    float4 grad = mix(mix(u.gradientColor1, u.gradientColor2, gp.x),
+                      mix(u.gradientColor3, u.gradientColor4, gp.x), gp.y);
+    rgb = mix(rgb, grad.rgb, grad.a * u.gradientMix);
+    return rgb;
+}
 
 float surfaceConvexSquircle(float x) {
     return pow(1.0 - pow(1.0 - x, 4.0), 0.25);
@@ -513,6 +536,7 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
     if (R < shortest * 0.45 && distFromSide >= bezel) {
         float4 flat = src.sample(s, captureUV);
         flat.rgb = mix(flat.rgb, u.tintColor.rgb, u.tintColor.a);
+        flat.rgb = lgApplyGlassGlobals(flat.rgb, u, gid, dimensions);
         return flat;
     }
 
@@ -579,6 +603,7 @@ float4 liquidGlassPixel(texture2d<float, access::sample> src,
     float glare = clamp(fresnel * 0.70 * mix(0.40, 1.0, luminance), 0.0, 0.18)
                 * clamp(u.fresnelGlareStrength, 0.0, 1.0);
     outRGB = 1.0 - (1.0 - outRGB) * (1.0 - glare);
+    outRGB = lgApplyGlassGlobals(outRGB, u, gid, dimensions);
     return float4(outRGB, edgeOpacity);
 }
 
@@ -769,6 +794,12 @@ static void ensureUniforms(__unsafe_unretained id<MTLDevice> device, uint64_t w,
     u->useGlyphMask            = 0.f;
     u->dispersionStrength      = 5.0f;
     u->fresnelGlareStrength    = 0.5f;
+    u->glassTint               = simd_make_float4(0.f, 0.f, 0.f, 0.f);
+    u->gradientColor1          = simd_make_float4(0.f, 0.f, 0.f, 0.f);
+    u->gradientColor2          = simd_make_float4(0.f, 0.f, 0.f, 0.f);
+    u->gradientColor3          = simd_make_float4(0.f, 0.f, 0.f, 0.f);
+    u->gradientColor4          = simd_make_float4(0.f, 0.f, 0.f, 0.f);
+    u->gradientMix             = 0.65f;
 
     lglog("uniforms buffer allocated (geometry refreshed per-frame)");
 }
@@ -815,6 +846,13 @@ static LGHostParams g_hostParams[kHostCount];
 static uint32_t g_darkAtoms[kHostCount];
 static bool         g_hostParamsInit = false;
 static float        g_fresnelGlareStrength = 0.5f;
+// V1.1.0 global glass tuning (glass tint + 4-stop gradient, applied in the shader)
+static simd_float4  g_globalGlassTint = {0.f, 0.f, 0.f, 0.f};
+static simd_float4  g_globalGradientColors[4] = {
+    {0.f, 0.f, 0.f, 0.f}, {0.f, 0.f, 0.f, 0.f},
+    {0.f, 0.f, 0.f, 0.f}, {0.f, 0.f, 0.f, 0.f}
+};
+static float        g_globalGradientMix = 0.65f;
 
 struct LGRadiusRoute { int host; float radiusRatio; bool dark; };
 static std::unordered_map<uint32_t, LGRadiusRoute> g_radiusRoutes;
@@ -894,6 +932,37 @@ static void lgReloadHostPrefs(void) {
     NSNumber *fresnelStrength = prefs[@"Renderer.FresnelGlareStrength"];
     g_fresnelGlareStrength = [fresnelStrength isKindOfClass:NSNumber.class]
         ? fminf(1.0f, fmaxf(0.0f, fresnelStrength.floatValue)) : 0.5f;
+
+    // V1.1.0: global glass strength multipliers (UI: 玻璃效果 tab)
+    static NSString * const kGlobalStrengthKeys[] = {
+        @"Global.GlassStrength",      // 0 玻璃强度
+        @"Global.RefractionStrength", // 1 折射强度
+        @"Global.BlurStrength",       // 2 模糊强度
+        @"Global.SpecularStrength",   // 3 高光强度
+        @"Global.DispersionStrength", // 4 色散强度
+        @"Global.GlassThickness",     // 5 玻璃厚度
+    };
+    static const float kGlobalStrengthDefaults[6] = {0.65f, 0.50f, 0.40f, 0.60f, 0.30f, 0.70f};
+    float globalStrength[6];
+    for (int gi = 0; gi < 6; gi++) {
+        NSNumber *gv = prefs[kGlobalStrengthKeys[gi]];
+        globalStrength[gi] = [gv isKindOfClass:NSNumber.class]
+            ? fminf(1.0f, fmaxf(0.0f, gv.floatValue)) : kGlobalStrengthDefaults[gi];
+    }
+    g_fresnelGlareStrength *= globalStrength[3]; // 高光强度 scales the fresnel highlight
+
+    simd_float4 decodedGlobal;
+    g_globalGlassTint = lgDecodeTintColor(prefs[@"Global.GlassTintColor"], &decodedGlobal)
+        ? decodedGlobal : simd_make_float4(0.f, 0.f, 0.f, 0.f);
+    static NSString * const kGlobalGradientKeys[4] = {
+        @"Global.GradientColor1", @"Global.GradientColor2",
+        @"Global.GradientColor3", @"Global.GradientColor4"
+    };
+    for (int gi = 0; gi < 4; gi++) {
+        g_globalGradientColors[gi] = lgDecodeTintColor(prefs[kGlobalGradientKeys[gi]], &decodedGlobal)
+            ? decodedGlobal : simd_make_float4(0.f, 0.f, 0.f, 0.f);
+    }
+
     int overrides = 0;
     for (int i = 0; i < kHostCount; i++) {
         uint32_t keepAtom = g_hostParamsInit ? g_hostParams[i].atom : 0;
@@ -937,6 +1006,13 @@ static void lgReloadHostPrefs(void) {
             g_hostParams[i].darkTintB = tint.z; g_hostParams[i].darkTintStrength = tint.w;
             overrides++;
         }
+        // V1.1.0: apply the global glass strength multipliers to this host.
+        g_hostParams[i].glassThickness      *= globalStrength[5];
+        g_hostParams[i].refractionScale     *= globalStrength[1];
+        g_hostParams[i].blur                *= globalStrength[2];
+        g_hostParams[i].dispersionStrength  *= globalStrength[4];
+        g_hostParams[i].tintStrength        *= globalStrength[0];
+        g_hostParams[i].darkTintStrength    *= globalStrength[0];
     }
     g_hostParamsInit = true;
 
@@ -1033,6 +1109,12 @@ static void ourCustomRender13(void *self, void *filter, void *layer, void *ctx,
     lu.fresnelGlareStrength = g_fresnelGlareStrength;
     lu.tintColor          = darkTint ? simd_make_float4(hp->darkTintR, hp->darkTintG, hp->darkTintB, hp->darkTintStrength)
                                   : simd_make_float4(hp->tintR, hp->tintG, hp->tintB, hp->tintStrength);
+    lu.glassTint         = g_globalGlassTint;
+    lu.gradientColor1    = g_globalGradientColors[0];
+    lu.gradientColor2    = g_globalGradientColors[1];
+    lu.gradientColor3    = g_globalGradientColors[2];
+    lu.gradientColor4    = g_globalGradientColors[3];
+    lu.gradientMix       = g_globalGradientMix;
 
     lu.backdropZoom    = !strcmp(hp->prefPrefix, "PrefsSwitch") ? 0.75f : 1.0f;
 
