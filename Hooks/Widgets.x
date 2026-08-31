@@ -6,6 +6,42 @@
 
 static const CGFloat kWidgetCornerRadius = 20.2;
 static void *kWidgetGlassKey = &kWidgetGlassKey;
+static void *kTodayGlassKey = &kTodayGlassKey;
+
+// 负一屏（Today 视图）背景检测
+static BOOL isTodayViewBackground(UIView *view) {
+    if (!view) return NO;
+    if (![NSStringFromClass(view.class) isEqualToString:@"MTMaterialView"]) return NO;
+    for (UIView *a = view.superview; a; a = a.superview) {
+        NSString *className = NSStringFromClass(a.class);
+        if ([className containsString:@"Today"] || [className containsString:@"SBHomeScreenToday"]) {
+            CGSize s = view.bounds.size;
+            if (s.width > 200.0 && s.height > 200.0) return YES;
+        }
+    }
+    return NO;
+}
+
+static void injectTodayGlass(UIView *material) {
+    @try {
+        if (!lgHostEnabled(@"Widgets")) return;
+        if (!isTodayViewBackground(material)) return;
+        if (!material.superview) return;
+
+        LGLiveBackdropView *glass = objc_getAssociatedObject(material, kTodayGlassKey);
+        if (!glass) {
+            glass = LGCreateRegisteredGlass(material.bounds, nil, @"Widgets");
+            if (!glass) return;
+            glass.userInteractionEnabled = NO;
+            [material.superview insertSubview:glass aboveSubview:material];
+            objc_setAssociatedObject(material, kTodayGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            lgTrackGlass(glass, @"Widgets", nil);
+        }
+        glass.frame = material.frame;
+        glass.hidden = material.hidden;
+        glass.alpha = material.alpha;
+    } @catch (__unused NSException *e) {}
+}
 
 @interface CHSWidget : NSObject
 @property (nonatomic, copy, readonly) NSString *extensionBundleIdentifier;
@@ -182,5 +218,18 @@ static void injectWidgetGlass(UIView *container) {
     %orig;
     UIView *host = widgetAncestorContainerHost((UIView *)self);
     if (host) injectWidgetGlass(host);
+}
+%end
+
+// 负一屏背景模糊：hook MTMaterialView
+%hook MTMaterialView
+- (void)didMoveToWindow {
+    %orig;
+    UIView *self_ = (UIView *)self;
+    if (self_.window) injectTodayGlass(self_);
+}
+- (void)layoutSubviews {
+    %orig;
+    injectTodayGlass((UIView *)self);
 }
 %end
