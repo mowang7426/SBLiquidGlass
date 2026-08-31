@@ -1,93 +1,103 @@
-name: Build tweak
+
+name: Build sbliquidglass v0.1
+
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: true
+
 jobs:
   build:
-    name: Build tweak
     runs-on: macos-14
-    env:
-      THEOS: ${{ github.workspace }}/theos
-      SDKVERSION: 16.5
-      THEOS_SDK_VERSION: 16.5
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install build tools
+
+      - name: Install dependencies
         run: |
-          set -e
-          brew install ldid make
+          brew install make dpkg ldid xz
+
+      - name: Set THEOS
+        run: |
+          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+          echo "THEOS_MAKE_PATH=$HOME/theos/makefiles" >> $GITHUB_ENV
+          echo "$HOME/theos/bin" >> $GITHUB_PATH
+
       - name: Install RootHide Theos
         run: |
-          set -e
-          rm -rf "$THEOS"
-          curl -fsSL https://raw.githubusercontent.com/roothide/theos/master/bin/install-theos             -o "$RUNNER_TEMP/install-theos"
-          bash "$RUNNER_TEMP/install-theos"
-          # 修复权限，确保make脚本可执行
-          chmod +x "$THEOS/bin/make"
-          test -d "$THEOS"
-          echo "Theos installed: $THEOS"
+          rm -rf "$HOME/theos"
+          git clone --recursive https://github.com/roothide/theos.git "$HOME/theos"
+
       - name: Install iPhoneOS 16.5 SDK
         run: |
           set -e
-          mkdir -p "$THEOS/sdks"
-          SDK_URL="https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz"
-          SDK_ARCHIVE="$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz"
-          rm -rf "$THEOS/sdks/iPhoneOS16.5.sdk"
-          rm -f "$SDK_ARCHIVE"
-          echo "Downloading iPhoneOS16.5.sdk..."
-          curl -fL --retry 3 --retry-delay 2             "$SDK_URL"             -o "$SDK_ARCHIVE"
-          echo "Extracting SDK..."
-          tar -xJf "$SDK_ARCHIVE" -C "$THEOS/sdks"
-          test -d "$THEOS/sdks/iPhoneOS16.5.sdk"
-          test -f "$THEOS/sdks/iPhoneOS16.5.sdk/SDKSettings.plist"
-          echo "SDK installed successfully:"
-          du -sh "$THEOS/sdks/iPhoneOS16.5.sdk"
-          ls -ld "$THEOS/sdks/iPhoneOS16.5.sdk"
-      - name: Verify Theos and SDK
+          rm -rf /tmp/theos-sdks
+          mkdir -p "$HOME/theos/sdks"
+          git clone --depth=1 --filter=blob:none --sparse https://github.com/theos/sdks.git /tmp/theos-sdks
+          cd /tmp/theos-sdks
+          git sparse-checkout set iPhoneOS16.5.sdk
+          cp -R "iPhoneOS16.5.sdk" "$HOME/theos/sdks/"
+
+      - name: Verify Theos environment
         run: |
           set -e
-          echo "=== Environment ==="
           echo "THEOS=$THEOS"
-          echo "SDKVERSION=$SDKVERSION"
-          echo "THEOS_SDK_VERSION=$THEOS_SDK_VERSION"
-          echo "=== SDK directories ==="
-          find "$THEOS/sdks" -maxdepth 1 -type d -name "*.sdk" -print
-          echo "=== Required SDK ==="
-          test -d "$THEOS/sdks/iPhoneOS16.5.sdk"
-          test -f "$THEOS/sdks/iPhoneOS16.5.sdk/SDKSettings.plist"
-          echo "=== Xcode ==="
-          xcodebuild -version
-          echo "=== Theos ==="
-          # 先打印文件权限调试
-          ls -la "$THEOS/bin/make"
-          # 不再使用 test -x，改用文件存在校验，权限已经chmod修复
-          test -f "$THEOS/bin/make"
-      - name: Build RootHide package
+          echo "THEOS_MAKE_PATH=$THEOS_MAKE_PATH"
+          test -f "$THEOS/makefiles/common.mk"
+          test -f "$THEOS/makefiles/tweak.mk"
+          test -f "$THEOS/makefiles/aggregate.mk"
+
+      - name: Verify package metadata
         run: |
           set -e
-          export THEOS="$GITHUB_WORKSPACE/theos"
-          export SDKVERSION=16.5
-          export THEOS_SDK_VERSION=16.5
-          echo "Building with:"
-          echo "THEOS=$THEOS"
-          echo "SDKVERSION=$SDKVERSION"
-          echo "SDK=$THEOS/sdks/iPhoneOS16.5.sdk"
-          test -d "$THEOS/sdks/iPhoneOS16.5.sdk"
-          "$THEOS/bin/make" clean
-          "$THEOS/bin/make" package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide
-      - name: List generated packages
+          grep -E '^(Package|Name|Version|Depends):' control
+
+      - name: Prepare build directory
+        run: |
+          rm -rf build
+          mkdir -p build
+
+      - name: Build Rootless
         run: |
           set -e
-          find packages -maxdepth 1 -type f -print || true
-      - name: Upload packages
+          make clean
+          THEOS_PACKAGE_SCHEME=rootless make package FINALPACKAGE=1
+
+      - name: Copy Rootless package
+        run: |
+          set -e
+          ROOTLESS_DEB=$(find packages -maxdepth 1 -type f -name "*.deb" | head -n 1)
+          cp "$ROOTLESS_DEB" "build/sbliquidglassv0.1-rootless.deb"
+
+      - name: Clean before RootHide
+        run: |
+          make clean
+          rm -rf packages
+
+      - name: Build RootHide
+        run: |
+          set -e
+          THEOS_PACKAGE_SCHEME=roothide make package FINALPACKAGE=1
+
+      - name: Copy RootHide package
+        run: |
+          set -e
+          ROOTHIDE_DEB=$(find packages -maxdepth 1 -type f -name "*.deb" | head -n 1)
+          cp "$ROOTHIDE_DEB" "build/sbliquidglassv0.1-roothide.deb"
+
+      - name: Verify DEB packages
+        run: |
+          set -e
+          for deb in build/*.deb; do
+            echo "===== Checking $deb ====="
+            test -f "$deb"
+            dpkg-deb --info "$deb"
+            echo "===== Package contents ====="
+            dpkg-deb -c "$deb"
+          done
+
+      - name: Upload DEB packages
         uses: actions/upload-artifact@v4
         with:
-          name: tweak-packages
-          path: packages/*.deb
-          if-no-files-found: error
+          name: sbliquidglass v0.1
+          path: build/*.deb
+
