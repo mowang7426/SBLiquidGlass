@@ -1,14 +1,14 @@
-# SBLiquidGlass V1.0.0 Alpha 1
+# SBLiquidGlass V1.1.0 Alpha 2
 
 SBLiquidGlass is a new project built from the GPL-licensed LiquidAss source architecture. The separate Liquidify binary supplied for reference is not bundled or copied into this project.
 
-## Alpha 1
+## Alpha 2
 
-- Dock is the only surface enabled by default.
+- Dock and App Icons are enabled by default.
 - Other existing LiquidAss surface hooks remain as an inactive foundation and require explicit per-surface preferences.
 - The Backboardd renderer remains a separate subproject.
 - Preferences use the `dylv.sbliquidglassprefs` namespace.
-- No Backboardd retry loop is introduced in Alpha 1.
+- No Backboardd retry loop is introduced in Alpha 2.
 
 ## Safety goals
 
@@ -20,3 +20,10 @@ SBLiquidGlass is a new project built from the GPL-licensed LiquidAss source arch
 ## First test
 
 Build with RootHide Theos and install only the `roothide` package on the test device. Confirm SpringBoard starts normally and Dock remains functional before enabling additional surfaces.
+
+## Alpha 2
+
+- Keeps the proven Dock path unchanged.
+- Enables App Icons as the next staged surface.
+- App icon glass uses a low-opacity live backdrop above the icon so the icon remains readable.
+- Folder icons and other surfaces remain unchanged and are not enabled by default.
