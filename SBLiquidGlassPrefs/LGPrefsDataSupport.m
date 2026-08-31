@@ -553,16 +553,22 @@ NSArray<NSDictionary *> *LGKeyboardItems(void) {
 }
 
 NSArray<NSDictionary *> *LGFolderItems(void) {
-    return LGJoinItemGroups(@[
-        @[
-            LGSectionSetting(LGLocalized(@"prefs.section.folder_icons.title"), nil),
-        ],
-        LGRendererItemsForHostPrefix(@"FolderIcon"),
-        @[
-            LGSectionSetting(LGLocalized(@"prefs.section.folder_open.title"), nil),
-        ],
-        LGRendererItemsForHostPrefix(@"OpenFolder"),
-    ]);
+    return @[
+        LGSectionSetting(LGLocalized(@"prefs.folder.title"),
+                        LGLocalized(@"prefs.folder.subtitle")),
+        LGSwitchSetting(@"FolderIcon.Enabled",
+                        LGLocalized(@"prefs.folder.folder_icon.title"),
+                        LGLocalized(@"prefs.folder.folder_icon.subtitle"), YES),
+        LGSwitchSetting(@"OpenFolder.Enabled",
+                        LGLocalized(@"prefs.folder.open_folder.title"),
+                        LGLocalized(@"prefs.folder.open_folder.subtitle"), YES),
+        LGSettingControlledByKey(
+            LGSliderSetting(@"OpenFolder.Blur",
+                            LGLocalized(@"prefs.folder.open_folder_blur.title"),
+                            LGLocalized(@"prefs.folder.open_folder_blur.subtitle"),
+                            8.0, 0.0, 50.0, 1),
+            @"OpenFolder.Enabled", @YES),
+    ];
 }
 
 NSArray<NSDictionary *> *LGAppIconItems(void) {
