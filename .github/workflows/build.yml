@@ -63,7 +63,7 @@ jobs:
           xcodebuild -version
           echo "=== Theos ==="
           test -x "$THEOS/bin/make"
-          "$THEOS/bin/make" --version || true
+          # 删除了不兼容的 --version 调用
       - name: Build RootHide package
         run: |
           set -e
