@@ -46,8 +46,9 @@ static void LGInstallAppIconGlass(UIView *iconView) {
     }
 
     if (glass.superview != parent) [glass removeFromSuperview];
-    // the source icon stays visible above its glass underlay
-    [parent insertSubview:glass belowSubview:iconView];
+    // Alpha 2: a low-opacity live-glass surface above each icon.
+    [parent insertSubview:glass aboveSubview:iconView];
+    glass.alpha = 0.22;
     glass.frame = iconView.frame;
 
     CGFloat folderRadius = LGFolderIconCornerRadiusFallback();
