@@ -36,11 +36,26 @@ static void qaSetBackdropHidden(UIVisualEffectView *effectView) {
 
 static BOOL isQuickActionsHost(UIView *view) {
     if (![view isKindOfClass:[UIVisualEffectView class]] || !view.window) return NO;
-    if (view.window.safeAreaInsets.bottom <= 0.0) return NO;
-    Class qaCls = NSClassFromString(@"CSQuickActionsButton");
+    // 检测父视图链中是否有锁屏快捷按钮相关的类
+    NSArray<NSString *> *qaClassNames = @[@"CSQuickActionsButton", @"CSQuickActionsView", @"SBQuickActionsButton", @"CSProminentButton"];
     for (UIView *a = view.superview; a; a = a.superview) {
-        if (qaCls && [a isKindOfClass:qaCls]) return YES;
+        NSString *clsName = NSStringFromClass(a.class);
+        for (NSString *name in qaClassNames) {
+            if ([clsName isEqualToString:name] || [clsName containsString:name]) return YES;
+        }
         if ([a isKindOfClass:[UIVisualEffectView class]]) return NO;
+    }
+    // 备用检测：通过视图位置和大小判断（屏幕底部的圆形小按钮）
+    CGRect frameInWindow = [view convertRect:view.bounds toView:view.window];
+    CGFloat windowHeight = CGRectGetHeight(view.window.bounds);
+    CGFloat viewWidth = CGRectGetWidth(view.bounds);
+    CGFloat viewHeight = CGRectGetHeight(view.bounds);
+    // 在屏幕底部，大小适中（50-80pt），接近正方形
+    if (CGRectGetMaxY(frameInWindow) > windowHeight * 0.7 &&
+        viewWidth >= 40.0 && viewWidth <= 100.0 &&
+        viewHeight >= 40.0 && viewHeight <= 100.0 &&
+        fabs(viewWidth - viewHeight) < 20.0) {
+        return YES;
     }
     return NO;
 }
