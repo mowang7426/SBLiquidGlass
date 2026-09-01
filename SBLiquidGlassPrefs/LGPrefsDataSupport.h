@@ -50,6 +50,7 @@ BOOL LGPrefsItemIsVisible(NSDictionary *item);
 
 NSArray<NSDictionary *> *LGDockItems(void);
 NSArray<NSDictionary *> *LGRendererItemsForHostPrefix(NSString *prefix);
+NSArray<NSDictionary *> *LGDynamicIslandItems(void);
 NSArray<NSDictionary *> *LGFolderItems(void);
 NSArray<NSDictionary *> *LGAppIconItems(void);
 NSArray<NSDictionary *> *LGSearchPillItems(void);
