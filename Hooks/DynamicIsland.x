@@ -4,6 +4,7 @@
 #import "../Shared/LGGlassKit.h"
 #import "../Shared/LGSharedSupport.h"
 #import <objc/runtime.h>
+#import <objc/message.h>
 
 #pragma mark - 私有类声明
 
@@ -359,7 +360,9 @@ static UIView *diPerformViewGetter(UIView *view, NSString *selectorName) {
     @try {
         SEL sel = NSSelectorFromString(selectorName);
         if (![view respondsToSelector:sel]) return nil;
-        id obj = [view performSelector:sel];
+        // Avoid -Warc-performSelector-leaks / -Werror under Theos ARC.
+        id (*sendGetter)(id, SEL) = (id (*)(id, SEL))objc_msgSend;
+        id obj = sendGetter(view, sel);
         return [obj isKindOfClass:[UIView class]] ? (UIView *)obj : nil;
     } @catch (__unused NSException *e) { return nil; }
 }
