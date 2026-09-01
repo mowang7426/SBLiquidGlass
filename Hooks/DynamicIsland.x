@@ -100,6 +100,72 @@ static void diSyncNiceGlass(UIView *view, LGLiveBackdropView *glass) {
 
 #pragma mark - 液态玻璃效果实现
 
+
+// Test5：Nice 的黑色区域在 Test4 中仍然不透，说明遮挡物很可能不是
+// UIView.backgroundColor，而是较大的 CALayer/CAShapeLayer 绘制出来的。
+// 这一版只对“覆盖容器大部分面积”的背景型 layer 做清理，避免碰内容图层。
+static BOOL diLayerLooksLikeIslandBackground(CALayer *layer, UIView *container) {
+    if (!layer || !container) return NO;
+    CGRect b = layer.bounds;
+    CGFloat cw = CGRectGetWidth(container.bounds);
+    CGFloat ch = CGRectGetHeight(container.bounds);
+    if (cw < 1 || ch < 1) return NO;
+
+    CGFloat rw = CGRectGetWidth(b) / cw;
+    CGFloat rh = CGRectGetHeight(b) / ch;
+    BOOL large = (rw >= 0.70 && rh >= 0.45);
+    BOOL rounded = layer.cornerRadius > 0.5;
+
+    NSString *name = layer.name.lowercaseString;
+    BOOL named = name.length &&
+        ([name containsString:@"back"] ||
+         [name containsString:@"bg"] ||
+         [name containsString:@"pill"] ||
+         [name containsString:@"material"] ||
+         [name containsString:@"background"]);
+
+    return large && (rounded || named);
+}
+
+static void diClearLargeBackgroundLayers(CALayer *layer, UIView *container, NSInteger depth) {
+    if (!layer || !container || depth > 12) return;
+
+    @try {
+        if (diLayerLooksLikeIslandBackground(layer, container)) {
+            layer.backgroundColor = UIColor.clearColor.CGColor;
+            if ([layer isKindOfClass:[CAShapeLayer class]]) {
+                CAShapeLayer *shape = (CAShapeLayer *)layer;
+                shape.fillColor = UIColor.clearColor.CGColor;
+            }
+            NSLog(@"[SBLiquidGlass-DI] Test5 cleared large background layer %@ bounds=%@",
+                  layer.name ?: NSStringFromClass(layer.class), NSStringFromCGRect(layer.bounds));
+        }
+
+        for (CALayer *sub in [layer.sublayers copy]) {
+            diClearLargeBackgroundLayers(sub, container, depth + 1);
+        }
+    } @catch (__unused NSException *e) {}
+}
+
+static void diPutNiceGlassBetweenBackgroundAndContent(UIView *container,
+                                                       LGLiveBackdropView *glass) {
+    if (!container || !glass) return;
+
+    @try {
+        // 关键变化：Test4 把 glass 放在 index 0，容易落到 Nice 的“黑底”下面。
+        // Test5 改成先放到最上面，再把现有内容放到 glass 上方。
+        [container bringSubviewToFront:glass];
+        glass.layer.zPosition = 0.5;
+        glass.userInteractionEnabled = NO;
+
+        for (UIView *sub in [container.subviews copy]) {
+            if (sub == glass) continue;
+            // 让 Nice 原有内容始终位于玻璃之上。
+            sub.layer.zPosition = MAX(sub.layer.zPosition, 1.0);
+        }
+    } @catch (__unused NSException *e) {}
+}
+
 static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
     @try {
         if (!view || !lgHostEnabled(@"DynamicIsland")) return;
@@ -113,6 +179,8 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
         if (glass) {
             if (isNiceIsland) {
                 diSyncNiceGlass(view, glass);
+                diPutNiceGlassBetweenBackgroundAndContent(view, glass);
+                diClearLargeBackgroundLayers(view.layer, view, 0);
                 // 每次 Nice layout 后重新清理一次刚刚被 Nice 写回的背景。
                 diClearNiceBackgroundTree(view, 0);
             } else {
@@ -157,11 +225,14 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
             // 先清掉 Nice 真正的背景节点。
             diClearNiceBackgroundTree(view, 0);
 
-            // 玻璃作为 Nice 自己的第一个子 View：
-            // [Nice View]
-            //   ├─ Liquid Glass
-            //   └─ Nice 内容
-            [view insertSubview:glass atIndex:0];
+            // Test5：不再把玻璃放到 index 0。
+            // 先把它放到最上层，再把 Nice 原有内容提升到玻璃之上，
+            // 从而让玻璃层可以位于 Nice 的黑色背景绘制之上。
+            [view addSubview:glass];
+            diPutNiceGlassBetweenBackgroundAndContent(view, glass);
+
+            // 清理容器层级中覆盖大面积的背景 CALayer / CAShapeLayer。
+            diClearLargeBackgroundLayers(view.layer, view, 0);
 
             // 再清一次，防止 Nice 的 layout 在插入过程中重新创建背景。
             diClearNiceBackgroundTree(view, 0);
@@ -235,11 +306,7 @@ static void diPrepareNiceContainer(UIView *container) {
         // 清理容器下明确的背景/材质节点；保留其它内容。
         diClearNiceBackgroundTree(container, 0);
 
-        // 如果已经有玻璃，确保它仍然位于内容最底层。
-        LGLiveBackdropView *glass = objc_getAssociatedObject(container, kDIGlassKey);
-        if (glass) {
-            [container sendSubviewToBack:glass];
-        }
+        // Test5 不再把玻璃压到黑色背景下面；层级在后续函数中单独维护。
     } @catch (__unused NSException *e) {}
 }
 
@@ -254,7 +321,8 @@ static void diApplyGlassToNiceCurrentContainer(UIView *container) {
 
         LGLiveBackdropView *glass = objc_getAssociatedObject(container, kDIGlassKey);
         if (glass) {
-            [container sendSubviewToBack:glass];
+            diPutNiceGlassBetweenBackgroundAndContent(container, glass);
+            diClearLargeBackgroundLayers(container.layer, container, 0);
             diSyncNiceGlass(container, glass);
             @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
         }
