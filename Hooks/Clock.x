@@ -2379,6 +2379,13 @@ static void LGApplyClockReplacement(UIView *host) {
     if (!LGIsClockHost(host)) {
         return;
     }
+    // 优化：添加节流，只有当距离上次调用超过 0.5 秒时才执行，减少 CPU 占用
+    NSNumber *lastApplyTime = objc_getAssociatedObject(host, @selector(lgClockLastApplyTime));
+    CFTimeInterval now = CACurrentMediaTime();
+    if (lastApplyTime && (now - lastApplyTime.doubleValue) < 0.5) {
+        return; // 距离上次调用不到 0.5 秒，跳过
+    }
+    objc_setAssociatedObject(host, @selector(lgClockLastApplyTime), @(now), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     UILabel *sourceLabel = LGClockPrimarySourceLabelForHost(host);
     NSArray<UIView *> *visibleSourceViews = LGClockVisibleSourceViewsForHost(host, sourceLabel);
