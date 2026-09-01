@@ -887,9 +887,6 @@ NSArray<NSDictionary *> *LGOverviewToggleItems(void) {
         LGSwitchSetting(@"Notification.Enabled",
                         LGLocalized(@"prefs.overview.toggle.notifications"),
                         LGLocalized(@"prefs.overview.toggle.notifications.subtitle"), NO),
-        LGSwitchSetting(@"QuickActions.Enabled",
-                        LGLocalized(@"prefs.overview.toggle.lockscreen"),
-                        LGLocalized(@"prefs.overview.toggle.lockscreen.subtitle"), NO),
         LGSwitchSetting(@"Clock.Enabled",
                         LGLocalized(@"prefs.overview.toggle.clock"),
                         LGLocalized(@"prefs.overview.toggle.clock.subtitle"), NO),
@@ -917,6 +914,9 @@ NSArray<NSDictionary *> *LGOverviewToggleItems(void) {
         LGSwitchSetting(@"SearchPill.Enabled",
                         @"搜索胶囊",
                         @"搜索胶囊液态玻璃效果", NO),
+        LGSwitchSetting(@"AppLibrary.Enabled",
+                        @"资源库",
+                        @"资源库液态玻璃效果", NO),
     ];
 }
 
