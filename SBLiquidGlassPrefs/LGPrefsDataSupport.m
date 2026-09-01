@@ -564,6 +564,55 @@ NSArray<NSDictionary *> *LGKeyboardItems(void) {
     ];
 }
 
+NSArray<NSDictionary *> *LGDynamicIslandItems(void) {
+    return @[
+        LGSectionSetting(@"灵动岛", @"自定义灵动岛的液态玻璃效果"),
+        LGSwitchSetting(@"DynamicIsland.Enabled",
+                        @"液态玻璃",
+                        @"开启灵动岛的液态玻璃效果", NO),
+        LGSwitchSetting(@"DynamicIsland.GradientShadow",
+                        @"渐变阴影",
+                        @"开启灵动岛的渐变阴影效果", NO),
+        @{
+            @"type": @"select",
+            @"key": @"DynamicIsland.FontColor",
+            @"title": @"字体颜色",
+            @"subtitle": @"设置灵动岛的字体颜色",
+            @"default": @"auto",
+            @"choices": @[
+                @{@"title": @"黑白自适应", @"value": @"auto"},
+                @{@"title": @"白色", @"value": @"white"},
+                @{@"title": @"黑色", @"value": @"black"},
+            ]
+        },
+        @{
+            @"type": @"color",
+            @"key": @"DynamicIsland.GradientColor1",
+            @"title": @"渐变颜色1",
+            @"subtitle": @"设置灵动岛的渐变颜色1",
+            @"default": @"#FAFDFF"
+        },
+        @{
+            @"type": @"color",
+            @"key": @"DynamicIsland.GradientColor2",
+            @"title": @"渐变颜色2",
+            @"subtitle": @"设置灵动岛的渐变颜色2",
+            @"default": @"#B8E8FF"
+        },
+        LGSwitchSetting(@"DynamicIsland.Hidden",
+                        @"隐藏灵动岛",
+                        @"隐藏灵动岛（测试功能）", NO),
+        @{
+            @"type": @"text",
+            @"key": @"DynamicIsland.CustomBackground",
+            @"title": @"自定义背景路径",
+            @"subtitle": @"设置灵动岛的自定义背景图片路径",
+            @"default": @"",
+            @"placeholder": @"/var/mobile/Library/di_bg.jpg"
+        },
+    ];
+}
+
 NSArray<NSDictionary *> *LGFolderItems(void) {
     return @[
         LGSectionSetting(LGLocalized(@"prefs.folder.title"),
@@ -758,6 +807,7 @@ NSArray<NSDictionary *> *LGHomescreenItems(void) {
     NSMutableArray<NSDictionary *> *rendererItems = [NSMutableArray array];
     [rendererItems addObject:LGSectionSetting(LGLocalized(@"prefs.section.dock.title"), nil)];
     [rendererItems addObjectsFromArray:LGDockItems()];
+    [rendererItems addObjectsFromArray:LGDynamicIslandItems()];
     [rendererItems addObjectsFromArray:LGFolderItems()];
     [rendererItems addObjectsFromArray:LGAppIconItems()];
     [rendererItems addObject:LGSectionSetting(LGLocalized(@"prefs.section.context_menu.title"), nil)];
