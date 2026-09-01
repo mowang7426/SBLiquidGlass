@@ -2064,10 +2064,16 @@ static UIView *LGClockOverlayContainerForHost(UIView *host) {
     if (self.frostView) {
         self.frostView.hidden = !frostEnabled;
         if (frostEnabled) {
-            // 根据模糊值调整磨砂效果的透明度（0-50 映射到 0.3-1.0）
-            CGFloat alpha = 0.3 + (blurValue / 50.0) * 0.7;
+            // 磨砂效果只覆盖文字区域，添加圆角
+            CGRect textFrame = self.maskLabel.frame;
+            CGFloat cornerRadius = CGRectGetHeight(textFrame) * 0.15;
+            self.frostView.frame = CGRectInset(textFrame, -12.0, -6.0);
+            self.frostView.layer.cornerRadius = cornerRadius;
+            self.frostView.layer.cornerCurve = kCACornerCurveContinuous;
+            self.frostView.layer.masksToBounds = YES;
+            // 根据模糊值调整磨砂效果的透明度（0-50 映射到 0.2-0.9）
+            CGFloat alpha = 0.2 + (blurValue / 50.0) * 0.7;
             self.frostView.alpha = alpha;
-            self.frostView.frame = self.bounds;
         }
     }
 
