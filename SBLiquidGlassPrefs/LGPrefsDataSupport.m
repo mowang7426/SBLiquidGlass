@@ -621,10 +621,22 @@ static NSArray<NSDictionary *> *LGControlCenterFullscreenBackdropItems(BOOL incl
 }
 
 NSArray<NSDictionary *> *LGControlCenterItems(void) {
-    return LGJoinItemGroups(@[
-        LGRendererItemsForHostPrefix(@"ControlCenter"),
-        LGControlCenterFullscreenBackdropItems(YES),
-    ]);
+    return @[
+        LGSectionSetting(LGLocalized(@"prefs.control_center.title"),
+                        LGLocalized(@"prefs.control_center.subtitle")),
+        LGSliderSetting(@"ControlCenter.CornerRadius",
+                        LGLocalized(@"prefs.control_center.corner_radius.title"),
+                        LGLocalized(@"prefs.control_center.corner_radius.subtitle"),
+                        0.5, 0.0, 1.0, 2),
+        LGSwitchSetting(@"ControlCenter.BlackBackground",
+                        LGLocalized(@"prefs.control_center.black_background.title"),
+                        LGLocalized(@"prefs.control_center.black_background.subtitle"),
+                        NO),
+        LGSliderSetting(@"ControlCenter.FullscreenBackdropBlurRadius",
+                        LGLocalized(@"prefs.control_center.background_blur.title"),
+                        LGLocalized(@"prefs.control_center.background_blur.subtitle"),
+                        8.0, 0.0, 50.0, 1),
+    ];
 }
 
 
