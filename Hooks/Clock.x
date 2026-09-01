@@ -2059,8 +2059,8 @@ static UIView *LGClockOverlayContainerForHost(UIView *host) {
     [self lg_applyMaskLabel];
 
     // 磨砂效果：根据偏好设置显示/隐藏磨砂背景
-    BOOL frostEnabled = [[LGGlassPreferenceValue(@"Clock.Frost.Enabled") boolValue] boolValue];
-    CGFloat blurValue = [[LGGlassPreferenceValue(@"Clock.Blur") floatValue] floatValue];
+    BOOL frostEnabled = [LGGlassPreferenceValue(@"Clock.Frost.Enabled") boolValue];
+    CGFloat blurValue = [LGGlassPreferenceValue(@"Clock.Blur") floatValue];
     if (self.frostView) {
         self.frostView.hidden = !frostEnabled;
         if (frostEnabled) {
