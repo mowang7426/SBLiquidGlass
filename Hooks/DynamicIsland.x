@@ -7,17 +7,7 @@
 
 #pragma mark - 灵动岛视图识别
 
-// 检查视图是否是 nice 灵动岛的自定义视图
-static BOOL diIsNiceApertureView(UIView *view) {
-    @try {
-        NSString *className = NSStringFromClass(view.class);
-        return [className hasPrefix:@"NBXLdd"] ||
-               [className hasPrefix:@"NBX"] ||
-               [className containsString:@"NiceAperture"] ||
-               [className containsString:@"NiceIsland"];
-    } @catch (__unused NSException *e) {}
-    return NO;
-}
+static void *kDIGlassKey = &kDIGlassKey;
 
 // 检查视图是否在灵动岛的视图层级中
 static BOOL diIsInDynamicIslandHierarchy(UIView *view) {
@@ -25,20 +15,15 @@ static BOOL diIsInDynamicIslandHierarchy(UIView *view) {
         UIView *candidate = view;
         for (NSInteger level = 0; candidate && level < 20; level++, candidate = candidate.superview) {
             NSString *className = NSStringFromClass(candidate.class);
-            // 系统灵动岛类名
             if ([className containsString:@"Aperture"] ||
                 [className containsString:@"DynamicIsland"] ||
-                [className containsString:@"Island"]) {
-                return YES;
-            }
-            // nice 灵动岛自定义类名
-            if ([className hasPrefix:@"NBX"] ||
+                [className containsString:@"Island"] ||
+                [className hasPrefix:@"NBX"] ||
                 [className containsString:@"NiceAperture"] ||
                 [className containsString:@"NiceIsland"]) {
                 return YES;
             }
         }
-        // 检查 window 的类名
         UIWindow *window = view.window;
         if (window) {
             NSString *windowClass = NSStringFromClass(window.class);
@@ -56,7 +41,6 @@ static BOOL diIsInDynamicIslandHierarchy(UIView *view) {
 static BOOL diIsDynamicIslandMaterial(UIView *mat) {
     @try {
         NSString *className = NSStringFromClass(mat.class);
-        // 检查是否是材质视图类（包括系统和 nice 灵动岛的背景视图）
         BOOL isMaterial = [className containsString:@"Material"] ||
                           [className containsString:@"Backdrop"] ||
                           [className containsString:@"Blur"] ||
@@ -65,7 +49,6 @@ static BOOL diIsDynamicIslandMaterial(UIView *mat) {
                           [className containsString:@"KeyLine"];
         if (!isMaterial) return NO;
         if (!diIsInDynamicIslandHierarchy(mat)) return NO;
-        // 尺寸检查
         CGFloat w = CGRectGetWidth(mat.bounds), h = CGRectGetHeight(mat.bounds);
         if (w < 10.0 || h < 5.0) return NO;
         return YES;
@@ -75,13 +58,10 @@ static BOOL diIsDynamicIslandMaterial(UIView *mat) {
 
 #pragma mark - 液态玻璃效果应用
 
-static void *kDIGlassKey = &kDIGlassKey;
-
 static void diApplyGlassToView(UIView *view) {
     @try {
         if (!lgHostEnabled(@"DynamicIsland")) return;
         
-        // 检查是否已经安装了液态玻璃
         LGLiveBackdropView *existing = objc_getAssociatedObject(view, kDIGlassKey);
         if (existing) {
             existing.hidden = NO;
@@ -92,13 +72,10 @@ static void diApplyGlassToView(UIView *view) {
         NSLog(@"[SBLiquidGlass-DI] Applying glass to view: %@ frame=%@",
               NSStringFromClass(view.class), NSStringFromCGRect(view.frame));
         
-        // 安装液态玻璃效果
-        LGLiveBackdropView *glass = LGInstallRegisteredGlassInMaterial(view, kDIGlassKey, @"DynamicIsland");
+        CGFloat cornerRadius = CGRectGetHeight(view.bounds) * 0.5;
+        LGLiveBackdropView *glass = LGInstallRegisteredGlassInMaterial(view, kDIGlassKey, @"DynamicIsland",
+                                                                         UIEdgeInsetsZero, cornerRadius, nil);
         if (glass) {
-            glass.frame = view.bounds;
-            glass.layer.cornerRadius = CGRectGetHeight(view.bounds) * 0.5;
-            glass.layer.cornerCurve = kCACornerCurveContinuous;
-            glass.layer.masksToBounds = YES;
             NSLog(@"[SBLiquidGlass-DI] Glass applied successfully to %@", NSStringFromClass(view.class));
         } else {
             NSLog(@"[SBLiquidGlass-DI] Failed to apply glass to %@", NSStringFromClass(view.class));
@@ -151,7 +128,6 @@ static void diRemoveGlassFromView(UIView *view) {
 
 #pragma mark - Hook nice 灵动岛的自定义视图
 
-// hook NBXLddClassic2View
 %hook NBXLddClassic2View
 
 - (void)didMoveToWindow {
@@ -174,7 +150,6 @@ static void diRemoveGlassFromView(UIView *view) {
 
 %end
 
-// hook NBXLddClassic3View
 %hook NBXLddClassic3View
 
 - (void)didMoveToWindow {
@@ -223,6 +198,6 @@ static void diRemoveGlassFromView(UIView *view) {
 
 %ctor {
     @try {
-        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (with NiceAperture support)");
+        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (fixed parameter count)");
     } @catch (__unused NSException *e) {}
 }
