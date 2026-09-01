@@ -7,40 +7,31 @@
 
 #pragma mark - 私有类声明
 
-// 声明系统灵动岛容器视图
 @interface SBSystemApertureContainerView : UIView
 @end
 
-// 声明 nice 灵动岛自定义视图
 @interface NBXLddClassic2View : UIView
 @end
 
 @interface NBXLddClassic3View : UIView
 @end
 
-#pragma mark - 安全的灵动岛液态玻璃实现
+#pragma mark - 液态玻璃效果实现
 
 static void *kDIGlassKey = &kDIGlassKey;
 
-// 安全地应用液态玻璃效果到指定视图
-static void diSafeApplyGlass(UIView *view) {
+// 应用液态玻璃效果到系统灵动岛（添加到内部最底层）
+static void diApplyGlassToSystemIsland(UIView *view) {
     @try {
-        if (!view) return;
-        if (!lgHostEnabled(@"DynamicIsland")) return;
-        
-        // 检查是否已经应用
+        if (!view || !lgHostEnabled(@"DynamicIsland")) return;
         if (objc_getAssociatedObject(view, kDIGlassKey)) return;
+        if (CGRectIsEmpty(view.bounds) || CGRectGetWidth(view.bounds) < 10) return;
         
-        // 安全检查：视图必须有有效的 frame
-        if (CGRectIsEmpty(view.bounds) || CGRectGetWidth(view.bounds) < 10 || CGRectGetHeight(view.bounds) < 5) return;
+        NSLog(@"[SBLiquidGlass-DI] Applying to system island: %@", NSStringFromClass(view.class));
         
-        NSLog(@"[SBLiquidGlass-DI] Applying to %@ frame=%@", NSStringFromClass(view.class), NSStringFromCGRect(view.frame));
-        
-        // 获取 filterType
         NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
         if (!filterType) filterType = @"dylv.liquidglass.dynamicisland";
         
-        // 创建液态玻璃背景视图
         LGLiveBackdropView *glass = [[LGLiveBackdropView alloc] initWithFrame:view.bounds
                                                                        groupName:nil
                                                                       filterType:filterType];
@@ -49,69 +40,112 @@ static void diSafeApplyGlass(UIView *view) {
         glass.layer.cornerRadius = cornerRadius;
         glass.layer.cornerCurve = kCACornerCurveContinuous;
         glass.layer.masksToBounds = YES;
-        glass.alpha = 0.9;
         
-        // 把目标视图的背景设置为半透明的黑色，既能让液态玻璃效果显示出来，又能保证白色字体的可读性
-        view.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.15];
+        // 系统灵动岛：添加到内部最底层
+        [view insertSubview:glass atIndex:0];
+        view.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.1];
         
-        // 遍历子视图，把背景视图设置为半透明（不完全隐藏，保证字体可读性）
+        objc_setAssociatedObject(view, kDIGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
+        });
+    } @catch (__unused NSException *e) {}
+}
+
+// 应用液态玻璃效果到 nice 灵动岛（添加到父视图中，位于 view 下面）
+static void diApplyGlassToNiceIsland(UIView *view) {
+    @try {
+        if (!view || !lgHostEnabled(@"DynamicIsland")) return;
+        if (objc_getAssociatedObject(view, kDIGlassKey)) return;
+        if (CGRectIsEmpty(view.bounds) || CGRectGetWidth(view.bounds) < 10) return;
+        
+        UIView *superview = view.superview;
+        if (!superview) return;
+        
+        NSLog(@"[SBLiquidGlass-DI] Applying to nice island: %@ frame=%@ superview=%@",
+              NSStringFromClass(view.class), NSStringFromCGRect(view.frame), NSStringFromClass(superview.class));
+        
+        NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
+        if (!filterType) filterType = @"dylv.liquidglass.dynamicisland";
+        
+        // nice 灵动岛：使用 view.frame（在父视图中的位置），添加到父视图中，位于 view 下面
+        LGLiveBackdropView *glass = [[LGLiveBackdropView alloc] initWithFrame:view.frame
+                                                                       groupName:nil
+                                                                      filterType:filterType];
+        glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
+        CGFloat cornerRadius = view.layer.cornerRadius > 0 ? view.layer.cornerRadius : CGRectGetHeight(view.bounds) * 0.5;
+        glass.layer.cornerRadius = cornerRadius;
+        glass.layer.cornerCurve = kCACornerCurveContinuous;
+        glass.layer.masksToBounds = YES;
+        
+        // 添加到父视图中，位于 view 下面
+        [superview insertSubview:glass belowSubview:view];
+        
+        // 把 nice 灵动岛的背景设置为完全透明，让液态玻璃效果透出来
+        view.backgroundColor = [UIColor clearColor];
+        
+        // 遍历子视图，把背景视图也设置为透明
         for (UIView *subview in view.subviews) {
             @try {
                 NSString *subClassName = NSStringFromClass(subview.class);
-                // 把背景类视图设置为半透明
                 if ([subClassName containsString:@"Backdrop"] ||
                     [subClassName containsString:@"Background"] ||
                     [subClassName containsString:@"Blur"] ||
                     [subClassName containsString:@"Material"] ||
                     [subClassName containsString:@"KeyLine"]) {
-                    subview.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.1];
-                    subview.alpha = 0.3;
-                    NSLog(@"[SBLiquidGlass-DI] Set background subview semi-transparent: %@", subClassName);
+                    subview.backgroundColor = [UIColor clearColor];
+                    subview.alpha = 0.0;
+                    subview.hidden = YES;
+                    NSLog(@"[SBLiquidGlass-DI] Hid nice island background: %@", subClassName);
                 }
             } @catch (__unused NSException *e) {}
         }
         
-        // 直接添加到目标视图内部，作为最底层的子视图
-        [view insertSubview:glass atIndex:0];
-        glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        
-        // 关联到目标视图
         objc_setAssociatedObject(view, kDIGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         
-        // 延迟应用滤镜
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            @try {
-                [glass applyFilters];
-            } @catch (__unused NSException *e) {}
+            @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
         });
         
-        NSLog(@"[SBLiquidGlass-DI] Done applying to %@", NSStringFromClass(view.class));
+        NSLog(@"[SBLiquidGlass-DI] Done applying to nice island");
     } @catch (__unused NSException *e) {
         NSLog(@"[SBLiquidGlass-DI] Exception: %@", e);
     }
 }
 
-// 安全地移除液态玻璃效果
-static void diSafeRemoveGlass(UIView *view) {
+// 更新液态玻璃视图的 frame
+static void diUpdateGlassFrame(UIView *view, BOOL isNiceIsland) {
     @try {
-        if (!view) return;
         LGLiveBackdropView *glass = objc_getAssociatedObject(view, kDIGlassKey);
-        if (glass) {
-            [glass removeFromSuperview];
-            objc_setAssociatedObject(view, kDIGlassKey, nil, OBJC_ASSOCIATION_ASSIGN);
+        if (!glass) return;
+        
+        if (isNiceIsland) {
+            // nice 灵动岛：glass 在父视图中，frame 应该等于 view.frame
+            if (!CGRectEqualToRect(glass.frame, view.frame)) {
+                glass.frame = view.frame;
+            }
+        } else {
+            // 系统灵动岛：glass 在 view 内部，frame 应该等于 view.bounds
+            if (!CGRectEqualToRect(glass.frame, view.bounds)) {
+                glass.frame = view.bounds;
+            }
+        }
+        
+        CGFloat cornerRadius = view.layer.cornerRadius > 0 ? view.layer.cornerRadius : CGRectGetHeight(view.bounds) * 0.5;
+        if (fabs(glass.layer.cornerRadius - cornerRadius) > 0.5) {
+            glass.layer.cornerRadius = cornerRadius;
         }
     } @catch (__unused NSException *e) {}
 }
 
-// 更新液态玻璃视图的 frame
-static void diSafeUpdateGlass(UIView *view) {
+// 移除液态玻璃效果
+static void diRemoveGlass(UIView *view) {
     @try {
-        if (!view) return;
         LGLiveBackdropView *glass = objc_getAssociatedObject(view, kDIGlassKey);
         if (glass) {
-            glass.frame = view.bounds;
-            CGFloat cornerRadius = view.layer.cornerRadius > 0 ? view.layer.cornerRadius : CGRectGetHeight(view.bounds) * 0.5;
-            glass.layer.cornerRadius = cornerRadius;
+            [glass removeFromSuperview];
+            objc_setAssociatedObject(view, kDIGlassKey, nil, OBJC_ASSOCIATION_ASSIGN);
         }
     } @catch (__unused NSException *e) {}
 }
@@ -124,9 +158,9 @@ static void diSafeUpdateGlass(UIView *view) {
     %orig;
     @try {
         if (self.window) {
-            diSafeApplyGlass(self);
+            diApplyGlassToSystemIsland(self);
         } else {
-            diSafeRemoveGlass(self);
+            diRemoveGlass(self);
         }
     } @catch (__unused NSException *e) {}
 }
@@ -134,8 +168,8 @@ static void diSafeUpdateGlass(UIView *view) {
 - (void)layoutSubviews {
     %orig;
     @try {
-        diSafeApplyGlass(self);
-        diSafeUpdateGlass(self);
+        diApplyGlassToSystemIsland(self);
+        diUpdateGlassFrame(self, NO);
     } @catch (__unused NSException *e) {}
 }
 
@@ -149,9 +183,9 @@ static void diSafeUpdateGlass(UIView *view) {
     %orig;
     @try {
         if (self.window) {
-            diSafeApplyGlass(self);
+            diApplyGlassToNiceIsland(self);
         } else {
-            diSafeRemoveGlass(self);
+            diRemoveGlass(self);
         }
     } @catch (__unused NSException *e) {}
 }
@@ -159,8 +193,8 @@ static void diSafeUpdateGlass(UIView *view) {
 - (void)layoutSubviews {
     %orig;
     @try {
-        diSafeApplyGlass(self);
-        diSafeUpdateGlass(self);
+        diApplyGlassToNiceIsland(self);
+        diUpdateGlassFrame(self, YES);
     } @catch (__unused NSException *e) {}
 }
 
@@ -172,9 +206,9 @@ static void diSafeUpdateGlass(UIView *view) {
     %orig;
     @try {
         if (self.window) {
-            diSafeApplyGlass(self);
+            diApplyGlassToNiceIsland(self);
         } else {
-            diSafeRemoveGlass(self);
+            diRemoveGlass(self);
         }
     } @catch (__unused NSException *e) {}
 }
@@ -182,8 +216,8 @@ static void diSafeUpdateGlass(UIView *view) {
 - (void)layoutSubviews {
     %orig;
     @try {
-        diSafeApplyGlass(self);
-        diSafeUpdateGlass(self);
+        diApplyGlassToNiceIsland(self);
+        diUpdateGlassFrame(self, YES);
     } @catch (__unused NSException *e) {}
 }
 
@@ -191,6 +225,6 @@ static void diSafeUpdateGlass(UIView *view) {
 
 %ctor {
     @try {
-        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (safe version with private class declarations)");
+        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (nice island below view approach)");
     } @catch (__unused NSException *e) {}
 }
