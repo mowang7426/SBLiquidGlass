@@ -294,3 +294,8 @@
 
 "prefs.overview.toggle.clock" = "锁屏时间";
 "prefs.overview.toggle.clock.subtitle" = "锁屏时间液态玻璃效果。";
+
+"prefs.lockscreen.quick_actions.title" = "锁屏快捷按钮";
+"prefs.lockscreen.quick_actions.subtitle" = "启用锁屏快捷按钮的液态玻璃效果。";
+"prefs.lockscreen.passcode.title" = "锁屏密码";
+"prefs.lockscreen.passcode.subtitle" = "启用锁屏密码界面的液态玻璃效果。";
