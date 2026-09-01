@@ -404,7 +404,20 @@ static const CGFloat kLGSpecularBrightBoostOpacity = 0.70;
     [self updateSpecular];
 }
 
-- (void)layoutSubviews  { [super layoutSubviews];  [self applyFilters]; [self updateSpecular]; }
+- (void)layoutSubviews  {
+    [super layoutSubviews];
+    // 性能优化：添加节流+可见性检查，避免频繁调用导致发热
+    if (self.hidden || self.alpha < 0.01 || !self.window) return;
+    if (CGRectIsEmpty(self.bounds) || CGRectGetWidth(self.bounds) < 1) return;
+    
+    static NSTimeInterval sLastApplyTime = 0;
+    NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
+    if (now - sLastApplyTime > 0.1) { // 最多每100ms调用一次（约10fps）
+        sLastApplyTime = now;
+        [self applyFilters];
+        [self updateSpecular];
+    }
+}
 
 - (void)updateNativeBlurOverlayWithRadius:(CGFloat)radius filterClass:(Class)filterCls {
     if (radius <= 0.0 || !filterCls) {
@@ -460,6 +473,7 @@ static const CGFloat kLGSpecularBrightBoostOpacity = 0.70;
 
 - (void)updateSpecular {
     if (CGRectIsEmpty(self.bounds)) return;
+    if (self.hidden || self.alpha < 0.01 || !self.window) return;
 
     NSNumber *override = self.lgSpecularEnabledOverride;
     BOOL enabled = override ? override.boolValue
@@ -521,6 +535,8 @@ static const CGFloat kLGSpecularBrightBoostOpacity = 0.70;
 }
 
 - (void)applyFilters {
+    // 性能优化：不可见时跳过渲染
+    if (self.hidden || self.alpha < 0.01 || !self.window) return;
     CALayer *layer = self.layer;
     Class backdropCls = NSClassFromString(@"CABackdropLayer");
     if (!backdropCls || ![layer isKindOfClass:backdropCls]) return;
