@@ -25,7 +25,15 @@ static BOOL ccIsModuleCandidate(UIView *module) {
 static CGFloat ccModuleCornerRadius(UIView *module) {
     CGFloat h = CGRectGetHeight(module.bounds);
     if (h <= 0.0) return 0.0;
-    CGFloat r = h * 0.5;
+    // 从用户偏好读取圆角比例，默认 0.5（圆形）
+    CGFloat radiusRatio = 0.5;
+    @try {
+        id ratioValue = LGGlassPreferenceValue(@"ControlCenter.CornerRadius");
+        if (ratioValue && [ratioValue respondsToSelector:@selector(floatValue)]) {
+            radiusRatio = [ratioValue floatValue];
+        }
+    } @catch (__unused NSException *e) {}
+    CGFloat r = h * radiusRatio;
     if (h < 100.0) { sCCSmallModuleRadius = r; return r; }
     return sCCSmallModuleRadius > 0.0 ? sCCSmallModuleRadius : r;
 }
