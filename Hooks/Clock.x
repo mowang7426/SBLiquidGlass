@@ -1019,6 +1019,8 @@ static void LGRelayoutLegacyNotificationListForController(UIViewController *cont
 }
 
 static void LGStartClockDisplayLink(void) {
+    // 优化：锁屏时间液态玻璃效果已禁用，不需要 displayLink 持续刷新，减少 CPU 占用
+    return;
     if (sClockDisplayLink.link || !LGClockEnabled()) return;
     LGStartClockDisplayLinkDriver(&sClockDisplayLink, ^{
         BOOL activityChanged = NO;
