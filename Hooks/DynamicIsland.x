@@ -20,30 +20,76 @@
 
 static void *kDIGlassKey = &kDIGlassKey;
 
-#pragma mark - Nice 灵动岛背景处理
+#pragma mark - Nice 灵动岛背景层处理
 
-// Nice 灵动岛必须保留内容层，只移除自身的不透明背景，
-// 让下面的 CABackdropLayer 真正采样其后方内容。
-static void diClearNiceBackground(UIView *view) {
-    if (!view) return;
+// Test3：不再给 Nice 整棵 View 树反复设置“半透明黑色”。
+// 只清理明显的背景/材质层，让真正的 LGLiveBackdropView 成为背景材质。
+// 内容层、图标、文字和 Nice 自己的动画保持不动。
+
+static BOOL diNameLooksLikeBackground(NSString *name) {
+    if (!name.length) return NO;
+    NSString *n = name.lowercaseString;
+    return [n containsString:@"background"] ||
+           [n containsString:@"backdrop"] ||
+           [n containsString:@"platter"] ||
+           [n isEqualToString:@"bgview"] ||
+           [n containsString:@".bg"] ||
+           [n containsString:@"material"];
+}
+
+static void diClearNiceBackgroundTree(UIView *view, NSInteger depth) {
+    if (!view || depth > 8) return;
+
     @try {
-        view.backgroundColor = [UIColor clearColor];
-        view.opaque = NO;
-        view.layer.backgroundColor = [UIColor clearColor].CGColor;
-
-        // 只处理明确的背景容器，不递归修改所有子视图，避免破坏 Nice 内容。
-        for (NSString *key in @[@"backgroundContainer", @"bgView", @"backdrop", @"platter"]) {
-            @try {
-                id obj = [view valueForKey:key];
-                if ([obj isKindOfClass:[UIView class]]) {
-                    UIView *bg = (UIView *)obj;
-                    bg.backgroundColor = [UIColor clearColor];
-                    bg.opaque = NO;
-                    bg.alpha = 1.0;
-                    bg.layer.backgroundColor = [UIColor clearColor].CGColor;
-                }
-            } @catch (__unused NSException *e) {}
+        // 根 View 本身只清理背景色，不改变 alpha，避免影响 Nice 内容。
+        if (depth == 0) {
+            view.backgroundColor = [UIColor clearColor];
+            view.layer.backgroundColor = UIColor.clearColor.CGColor;
         }
+
+        // 只处理名字明确指向背景/材质的子 View。
+        for (UIView *sub in [view.subviews copy]) {
+            NSString *className = NSStringFromClass(sub.class);
+
+            if (diNameLooksLikeBackground(className)) {
+                sub.backgroundColor = [UIColor clearColor];
+                sub.layer.backgroundColor = UIColor.clearColor.CGColor;
+
+                // 背景容器本身可以隐藏；如果它承载内容则不命中这些名字。
+                sub.alpha = 0.0;
+
+                // 同时清掉它的直接 sublayers 背景色，避免黑色 CALayer 继续盖住玻璃。
+                for (CALayer *layer in [sub.layer.sublayers copy]) {
+                    if (layer.backgroundColor) {
+                        layer.backgroundColor = UIColor.clearColor.CGColor;
+                    }
+                }
+
+                NSLog(@"[SBLiquidGlass-DI] Cleared Nice background node: %@", className);
+            }
+
+            diClearNiceBackgroundTree(sub, depth + 1);
+        }
+    } @catch (__unused NSException *e) {}
+}
+
+static void diSyncNiceGlass(UIView *view, LGLiveBackdropView *glass) {
+    if (!view || !glass) return;
+
+    @try {
+        glass.frame = view.bounds;
+        glass.autoresizingMask = UIViewAutoresizingFlexibleWidth |
+                                 UIViewAutoresizingFlexibleHeight;
+
+        CGFloat radius = view.layer.cornerRadius;
+        if (radius <= 0.0) {
+            radius = MIN(CGRectGetWidth(view.bounds),
+                         CGRectGetHeight(view.bounds)) * 0.5;
+        }
+
+        glass.layer.cornerRadius = radius;
+        glass.layer.cornerCurve = kCACornerCurveContinuous;
+        glass.layer.masksToBounds = YES;
     } @catch (__unused NSException *e) {}
 }
 
@@ -52,62 +98,83 @@ static void diClearNiceBackground(UIView *view) {
 static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
     @try {
         if (!view || !lgHostEnabled(@"DynamicIsland")) return;
-        if (CGRectIsEmpty(view.bounds) || CGRectGetWidth(view.bounds) < 10) return;
-        
-        NSLog(@"[SBLiquidGlass-DI] Applying to %@ (nice=%d)", NSStringFromClass(view.class), isNiceIsland);
-        
-        if (isNiceIsland) {
-            diClearNiceBackground(view);
-        }
-        
-        // 检查是否已经应用了液态玻璃
-        LGLiveBackdropView *glass = objc_getAssociatedObject(view, kDIGlassKey);
+        if (CGRectIsEmpty(view.bounds) ||
+            CGRectGetWidth(view.bounds) < 10 ||
+            CGRectGetHeight(view.bounds) < 5) return;
+
+        LGLiveBackdropView *glass =
+            objc_getAssociatedObject(view, kDIGlassKey);
+
         if (glass) {
-            CGRect targetBounds = view.bounds;
-            if (!CGRectEqualToRect(glass.frame, targetBounds)) {
-                glass.frame = targetBounds;
-            }
-            CGFloat cornerRadius = view.layer.cornerRadius > 0 ? view.layer.cornerRadius : CGRectGetHeight(view.bounds) * 0.5;
-            if (fabs(glass.layer.cornerRadius - cornerRadius) > 0.5) {
-                glass.layer.cornerRadius = cornerRadius;
+            if (isNiceIsland) {
+                diSyncNiceGlass(view, glass);
+                // 每次 Nice layout 后重新清理一次刚刚被 Nice 写回的背景。
+                diClearNiceBackgroundTree(view, 0);
+            } else {
+                glass.frame = view.bounds;
+                CGFloat radius = view.layer.cornerRadius > 0 ?
+                    view.layer.cornerRadius :
+                    CGRectGetHeight(view.bounds) * 0.5;
+                glass.layer.cornerRadius = radius;
             }
             return;
         }
-        
+
         NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
-        if (!filterType) filterType = @"dylv.liquidglass.dynamicisland";
-        
-        // IMPORTANT: glass 是 view 的子视图，必须使用 view.bounds，
-        // 不能使用 view.frame，否则会把玻璃放到错误的坐标系。
+        if (!filterType.length)
+            filterType = @"dylv.liquidglass.dynamicisland";
+
+        // 关键：Nice 的玻璃必须属于 Nice 自己的坐标系。
         CGRect glassFrame = view.bounds;
+
         glass = [[LGLiveBackdropView alloc] initWithFrame:glassFrame
                                                  groupName:nil
                                                 filterType:filterType];
-        glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight |
-                                 UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin |
-                                 UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
-        CGFloat cornerRadius = view.layer.cornerRadius > 0 ? view.layer.cornerRadius : CGRectGetHeight(view.bounds) * 0.5;
-        glass.layer.cornerRadius = cornerRadius;
+
+        glass.autoresizingMask = UIViewAutoresizingFlexibleWidth |
+                                 UIViewAutoresizingFlexibleHeight;
+
+        CGFloat radius = view.layer.cornerRadius;
+        if (radius <= 0.0) {
+            radius = MIN(CGRectGetWidth(view.bounds),
+                         CGRectGetHeight(view.bounds)) * 0.5;
+        }
+
+        glass.layer.cornerRadius = radius;
         glass.layer.cornerCurve = kCACornerCurveContinuous;
         glass.layer.masksToBounds = YES;
-        glass.alpha = 0.85; // 液态玻璃效果稍微透明一点，模拟小白点效果
-        
-        // Nice 内容必须在玻璃上面，因此玻璃作为 Nice 的第一个子视图。
-        [view insertSubview:glass atIndex:0];
+
+        // 不再用 alpha 0.85 叠加一层黑色；让 Backdrop 自己负责玻璃材质。
+        glass.alpha = 1.0;
+        glass.backgroundColor = [UIColor clearColor];
+
         if (isNiceIsland) {
-            diClearNiceBackground(view);
+            // 先清掉 Nice 真正的背景节点。
+            diClearNiceBackgroundTree(view, 0);
+
+            // 玻璃作为 Nice 自己的第一个子 View：
+            // [Nice View]
+            //   ├─ Liquid Glass
+            //   └─ Nice 内容
+            [view insertSubview:glass atIndex:0];
+
+            // 再清一次，防止 Nice 的 layout 在插入过程中重新创建背景。
+            diClearNiceBackgroundTree(view, 0);
         } else {
-            view.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.1];
+            [view insertSubview:glass atIndex:0];
+            view.backgroundColor =
+                [[UIColor blackColor] colorWithAlphaComponent:0.05];
         }
-        
-        objc_setAssociatedObject(view, kDIGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
-        });
-        
-        NSLog(@"[SBLiquidGlass-DI] Done applying glass (Nice background-material mode)");
-    } @catch (__unused NSException *e) {
+
+        objc_setAssociatedObject(view, kDIGlassKey, glass,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+        // 立即应用，避免第一次显示时出现普通黑色背景闪烁。
+        @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
+
+        NSLog(@"[SBLiquidGlass-DI] Liquid Glass attached to %@ (nice=%d)",
+              NSStringFromClass(view.class), isNiceIsland);
+    } @catch (NSException *e) {
         NSLog(@"[SBLiquidGlass-DI] Exception: %@", e);
     }
 }
@@ -194,6 +261,6 @@ static void diRemoveGlass(UIView *view) {
 
 %ctor {
     @try {
-        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (Nice Liquid Glass material mode)");
+        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (Nice Liquid Glass Test3)");
     } @catch (__unused NSException *e) {}
 }
