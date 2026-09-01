@@ -51,6 +51,26 @@ static void diSafeApplyGlass(UIView *view) {
         glass.layer.masksToBounds = YES;
         glass.alpha = 0.9;
         
+        // 把目标视图的背景设置为半透明的黑色，既能让液态玻璃效果显示出来，又能保证白色字体的可读性
+        view.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.15];
+        
+        // 遍历子视图，把背景视图设置为半透明（不完全隐藏，保证字体可读性）
+        for (UIView *subview in view.subviews) {
+            @try {
+                NSString *subClassName = NSStringFromClass(subview.class);
+                // 把背景类视图设置为半透明
+                if ([subClassName containsString:@"Backdrop"] ||
+                    [subClassName containsString:@"Background"] ||
+                    [subClassName containsString:@"Blur"] ||
+                    [subClassName containsString:@"Material"] ||
+                    [subClassName containsString:@"KeyLine"]) {
+                    subview.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.1];
+                    subview.alpha = 0.3;
+                    NSLog(@"[SBLiquidGlass-DI] Set background subview semi-transparent: %@", subClassName);
+                }
+            } @catch (__unused NSException *e) {}
+        }
+        
         // 直接添加到目标视图内部，作为最底层的子视图
         [view insertSubview:glass atIndex:0];
         glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
