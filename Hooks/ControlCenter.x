@@ -58,9 +58,12 @@ static CGFloat ccPillRadius(UIView *v) {
 }
 
 static CGFloat ccGlassRadiusForMaterial(UIView *mat) {
-    if (ccHasSBElasticHierarchy(mat)) return -1.0;
+    // 移除对 SBElastic（音量HUD）的排除，让音量HUD也有液态玻璃效果
+    // if (ccHasSBElasticHierarchy(mat)) return -1.0;
     if (!isExactClass(mat, @"MTMaterialView")) return -1.0;
-    if (!hasAncestorOfClassName(mat, @"CCUIContentModuleContainerView")) return -1.0;
+    // 音量HUD可能没有 CCUIContentModuleContainerView 祖先，放宽检查
+    if (!hasAncestorOfClassName(mat, @"CCUIContentModuleContainerView") &&
+        !ccHasSBElasticHierarchy(mat)) return -1.0;
 
     CGFloat w = CGRectGetWidth(mat.bounds), h = CGRectGetHeight(mat.bounds);
     if (w < 30.0 || h < 30.0) return -1.0;
