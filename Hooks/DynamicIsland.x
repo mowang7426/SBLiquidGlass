@@ -276,24 +276,6 @@ static void diRefreshMangoGlass(UIView *glass) {
     } @catch (__unused NSException *e) {}
 }
 
-static void diConfigureGlassView(UIView *glass, UIView *host) {
-    if (!glass || !host) return;
-    glass.frame = host.bounds;
-    glass.autoresizingMask = UIViewAutoresizingFlexibleWidth |
-                             UIViewAutoresizingFlexibleHeight;
-    glass.backgroundColor = UIColor.clearColor;
-    glass.opaque = NO;
-    glass.userInteractionEnabled = NO;
-
-    CGFloat radius = host.layer.cornerRadius;
-    if (radius <= 0.0) {
-        radius = MIN(CGRectGetWidth(host.bounds), CGRectGetHeight(host.bounds)) * 0.5;
-    }
-    glass.layer.cornerRadius = radius;
-    glass.layer.cornerCurve = kCACornerCurveContinuous;
-    glass.layer.masksToBounds = YES;
-}
-
 static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
     @try {
         if (!view || !lgHostEnabled(@"DynamicIsland")) return;
