@@ -685,6 +685,12 @@ NSArray<NSDictionary *> *LGLockscreenItems(void) {
             LGSwitchSetting(@"Notification.BackgroundAdaptive",
                             LGLocalized(@"prefs.notification.background_adaptive"),
                             LGLocalized(@"prefs.notification.background_adaptive.subtitle"), NO),
+            LGSettingControlledByKey(
+                LGSliderSetting(@"Notification.BackgroundAlpha",
+                                LGLocalized(@"prefs.notification.background_alpha.title"),
+                                LGLocalized(@"prefs.notification.background_alpha.subtitle"),
+                                0.12, 0.0, 0.5, 2),
+                @"Notification.BackgroundAdaptive", @YES),
         ],
         @[
             LGSectionSetting(LGLocalized(@"prefs.section.lockscreen_quick_actions.title"), nil),
