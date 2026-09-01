@@ -5,6 +5,19 @@
 #import "../Shared/LGSharedSupport.h"
 #import <objc/runtime.h>
 
+#pragma mark - 私有类声明
+
+// 声明系统灵动岛容器视图
+@interface SBSystemApertureContainerView : UIView
+@end
+
+// 声明 nice 灵动岛自定义视图
+@interface NBXLddClassic2View : UIView
+@end
+
+@interface NBXLddClassic3View : UIView
+@end
+
 #pragma mark - 安全的灵动岛液态玻璃实现
 
 static void *kDIGlassKey = &kDIGlassKey;
@@ -160,6 +173,6 @@ static void diSafeUpdateGlass(UIView *view) {
 
 %ctor {
     @try {
-        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (safe version, no UIView hook)");
+        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (safe version with private class declarations)");
     } @catch (__unused NSException *e) {}
 }
