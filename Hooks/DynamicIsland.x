@@ -4,7 +4,6 @@
 #import "../Shared/LGGlassKit.h"
 #import "../Shared/LGSharedSupport.h"
 #import <objc/runtime.h>
-#import <objc/message.h>
 
 #pragma mark - 私有类声明
 
@@ -15,9 +14,6 @@
 @end
 
 @interface NBXLddClassic3View : UIView
-@end
-
-@interface _SBAdaptiveKeyLineBackdropView : UIView
 @end
 
 @interface ArtWorkManager : NSObject
@@ -168,7 +164,7 @@ static void diSyncNiceGlass(UIView *view, LGLiveBackdropView *glass) {
 #pragma mark - 液态玻璃效果实现
 
 
-// Test5：Nice 的黑色区域在 Test4 中仍然不透，说明遮挡物很可能不是
+// Test9：Nice 的黑色区域在 Test4 中仍然不透，说明遮挡物很可能不是
 // UIView.backgroundColor，而是较大的 CALayer/CAShapeLayer 绘制出来的。
 // 这一版只对“覆盖容器大部分面积”的背景型 layer 做清理，避免碰内容图层。
 static BOOL diLayerLooksLikeIslandBackground(CALayer *layer, UIView *container) {
@@ -292,7 +288,7 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
             // 先清掉 Nice 真正的背景节点。
             diClearNiceBackgroundTree(view, 0);
 
-            // Test5：不再把玻璃放到 index 0。
+            // Test9：不再把玻璃放到 index 0。
             // 先把它放到最上层，再把 Nice 原有内容提升到玻璃之上，
             // 从而让玻璃层可以位于 Nice 的黑色背景绘制之上。
             [view addSubview:glass];
@@ -332,239 +328,15 @@ static void diRemoveGlass(UIView *view) {
     } @catch (__unused NSException *e) {}
 }
 
-static BOOL diNiceIsActiveInsideAperture(UIView *aperture) {
-    if (!aperture || ![aperture window]) return NO;
-    @try {
-        Class cls = NSClassFromString(@"ArtWorkManager");
-        if (!cls || ![cls respondsToSelector:@selector(shared)]) return NO;
-        ArtWorkManager *mgr = [cls shared];
-        if (!mgr || ![mgr respondsToSelector:@selector(getCurrentContainerView)]) return NO;
-        UIView *nice = (UIView *)[mgr getCurrentContainerView];
-        if (!nice) return NO;
-        for (UIView *v = nice; v; v = v.superview) {
-            if (v == aperture) return YES;
-        }
-    } @catch (__unused NSException *e) {}
-    return NO;
-}
+#pragma mark - Nice 专用：不 Hook 系统 rendering configuration
 
-
-// Test7: Nice 1.0.3.6 的实际二进制表明 currentContainer 上存在
-// backView / processview 等动态属性，而 Nice 同时对
-// SBSystemApertureContainerView 注入了 renderingConfiguration/keyline 逻辑。
-// 本版不再给 Nice currentContainer 叠第二层玻璃，而是优先把玻璃挂到
-// Nice 自己的 backView/backgroundContainer；同时只针对
-// _SBAdaptiveKeyLineBackdropView 做隐藏处理。
-static UIView *diPerformViewGetter(UIView *view, NSString *selectorName) {
-    if (!view || !selectorName.length) return nil;
-    @try {
-        SEL sel = NSSelectorFromString(selectorName);
-        if (![view respondsToSelector:sel]) return nil;
-        // Avoid -Warc-performSelector-leaks / -Werror under Theos ARC.
-        id (*sendGetter)(id, SEL) = (id (*)(id, SEL))objc_msgSend;
-        id obj = sendGetter(view, sel);
-        return [obj isKindOfClass:[UIView class]] ? (UIView *)obj : nil;
-    } @catch (__unused NSException *e) { return nil; }
-}
-
-static void diNeutralizeSpecificNiceMaterialView(UIView *candidate) {
-    if (!candidate) return;
-    @try {
-        candidate.backgroundColor = UIColor.clearColor;
-        candidate.opaque = NO;
-        candidate.layer.backgroundColor = UIColor.clearColor.CGColor;
-        if ([candidate isKindOfClass:[UIVisualEffectView class]]) {
-            ((UIVisualEffectView *)candidate).effect = nil;
-        }
-    } @catch (__unused NSException *e) {}
-}
-
-static void diHideSystemApertureBackdropNodes(UIView *root, NSInteger depth) {
-    if (!root || depth > 12) return;
-    @try {
-        NSString *name = NSStringFromClass(root.class);
-        if ([name isEqualToString:@"_SBAdaptiveKeyLineBackdropView"] ||
-            [name containsString:@"SBAdaptiveKeyLineBackdropView"]) {
-            root.hidden = YES;
-            root.alpha = 0.0;
-            root.backgroundColor = UIColor.clearColor;
-            root.layer.backgroundColor = UIColor.clearColor.CGColor;
-            NSLog(@"[SBLiquidGlass-DI] Test7 hid %@", name);
-            return;
-        }
-        for (UIView *sub in [root.subviews copy])
-            diHideSystemApertureBackdropNodes(sub, depth + 1);
-    } @catch (__unused NSException *e) {}
-}
-
-static UIView *diNiceMaterialHost(UIView *container) {
-    if (!container) return nil;
-    UIView *back = diPerformViewGetter(container, @"backView");
-    if (back) return back;
-    UIView *bg = diPerformViewGetter(container, @"backgroundContainer");
-    if (bg) return bg;
-    UIView *process = diPerformViewGetter(container, @"processview");
-    if (process) return process;
-    return container;
-}
-
-static void diApplyGlassToNiceMaterialHost(UIView *container) {
-    if (!container || !lgHostEnabled(@"DynamicIsland")) return;
-    @try {
-        UIView *host = diNiceMaterialHost(container);
-        if (!host) return;
-        diNeutralizeSpecificNiceMaterialView(host);
-
-        LGLiveBackdropView *glass = objc_getAssociatedObject(host, kDIGlassKey);
-        if (!glass) {
-            NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
-            if (!filterType.length) filterType = @"dylv.liquidglass.dynamicisland";
-            glass = [[LGLiveBackdropView alloc] initWithFrame:host.bounds
-                                                     groupName:nil
-                                                    filterType:filterType];
-            glass.autoresizingMask = UIViewAutoresizingFlexibleWidth |
-                                     UIViewAutoresizingFlexibleHeight;
-            glass.userInteractionEnabled = NO;
-            glass.backgroundColor = UIColor.clearColor;
-            glass.alpha = 1.0;
-            objc_setAssociatedObject(host, kDIGlassKey, glass,
-                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        }
-
-        glass.frame = host.bounds;
-        CGFloat radius = container.layer.cornerRadius;
-        if (radius <= 0.0)
-            radius = MIN(CGRectGetWidth(host.bounds), CGRectGetHeight(host.bounds)) * 0.5;
-        glass.layer.cornerRadius = radius;
-        glass.layer.cornerCurve = kCACornerCurveContinuous;
-        glass.layer.masksToBounds = YES;
-
-        if (glass.superview != host) {
-            [glass removeFromSuperview];
-            [host insertSubview:glass atIndex:0];
-        } else {
-            [host sendSubviewToBack:glass];
-        }
-        @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
-        NSLog(@"[SBLiquidGlass-DI] Test7 material host = %@ frame=%@",
-              NSStringFromClass(host.class), NSStringFromCGRect(host.frame));
-    } @catch (NSException *e) {
-        NSLog(@"[SBLiquidGlass-DI] Test7 exception: %@", e);
-    }
-}
-
-#pragma mark - Hook 系统灵动岛容器视图
-
-%hook SBSystemApertureContainerView
-
-- (void)setRenderingConfiguration:(id)configuration {
-    %orig(configuration);
-    @try {
-        // Nice 自己也 hook 了这个 setter；在它重新应用 rendering config 后，
-        // 再次隐藏系统 keyline backdrop，避免黑色材质被重新显示。
-        if (self.window) {
-            diHideSystemApertureBackdropNodes(self, 0);
-        }
-    } @catch (__unused NSException *e) {}
-}
-
-- (void)_updateKeyLineStyle {
-    %orig;
-    @try {
-        if (self.window) {
-            diHideSystemApertureBackdropNodes(self, 0);
-        }
-    } @catch (__unused NSException *e) {}
-}
-
-- (void)didMoveToWindow {
-    %orig;
-    @try {
-        if (self.window) {
-            diHideSystemApertureBackdropNodes(self, 0);
-            if (!diNiceIsActiveInsideAperture(self)) {
-                diClearBlackRenderingTree(self, 0);
-                diApplyGlassToView(self, NO);
-            }
-        } else {
-            diRemoveGlass(self);
-        }
-    } @catch (__unused NSException *e) {}
-}
-
-- (void)layoutSubviews {
-    %orig;
-    @try {
-        diHideSystemApertureBackdropNodes(self, 0);
-        if (!diNiceIsActiveInsideAperture(self)) {
-            diClearBlackRenderingTree(self, 0);
-            diApplyGlassToView(self, NO);
-        }
-    } @catch (__unused NSException *e) {}
-}
-
-%end
-
-
-// Nice 明确使用的系统 backdrop 类。若它存在，则在 Nice 容器链上关闭其
-// 原生 effect，避免它在最终合成阶段把我们的 backdrop 压成纯黑。
-%hook _SBAdaptiveKeyLineBackdropView
-
-- (void)setEffect:(UIVisualEffect *)effect {
-    @try {
-        BOOL underAperture = NO;
-        for (UIView *v = self; v; v = v.superview) {
-            if ([NSStringFromClass(v.class) isEqualToString:@"SBSystemApertureContainerView"]) {
-                underAperture = YES;
-                break;
-            }
-        }
-        Class niceMgrClass = NSClassFromString(@"ArtWorkManager");
-        if (underAperture && niceMgrClass && [niceMgrClass respondsToSelector:@selector(shared)]) {
-            ArtWorkManager *mgr = [niceMgrClass shared];
-            UIView *nice = [mgr respondsToSelector:@selector(getCurrentContainerView)] ?
-                (UIView *)[mgr getCurrentContainerView] : nil;
-            if (nice) {
-                %orig(nil);
-                self.alpha = 0.0;
-                self.backgroundColor = UIColor.clearColor;
-                return;
-            }
-        }
-    } @catch (__unused NSException *e) {}
-    %orig(effect);
-}
-
-- (void)layoutSubviews {
-    %orig;
-    @try {
-        BOOL underAperture = NO;
-        for (UIView *v = self; v; v = v.superview) {
-            if ([NSStringFromClass(v.class) isEqualToString:@"SBSystemApertureContainerView"]) {
-                underAperture = YES;
-                break;
-            }
-        }
-        if (underAperture) {
-            Class niceMgrClass = NSClassFromString(@"ArtWorkManager");
-            if (niceMgrClass && [niceMgrClass respondsToSelector:@selector(shared)]) {
-                ArtWorkManager *mgr = [niceMgrClass shared];
-                UIView *nice = [mgr respondsToSelector:@selector(getCurrentContainerView)] ?
-                    (UIView *)[mgr getCurrentContainerView] : nil;
-                if (nice) {
-                    self.alpha = 0.0;
-                    self.backgroundColor = UIColor.clearColor;
-                }
-            }
-        }
-    } @catch (__unused NSException *e) {}
-}
-
-%end
+// 安全版：不修改 SBSystemApertureContainerView 的私有渲染配置，也不 Hook
+// setRenderingConfiguration:。Nice 自己会重建/更新系统材质；这里仅处理 Nice
+// ArtWorkManager 返回的当前容器，避免破坏 SpringBoard 私有 ABI。
 
 #pragma mark - Hook Nice ArtWorkManager：真正的当前容器
 
-// Test4：Nice 的 NBXLddClassic2/3View 只是内容元素，不再把它们当作
+// Test9：Nice 的 NBXLddClassic2/3View 只是内容元素，不再把它们当作
 // 整个灵动岛的根容器。Nice 自己的 ArtWorkManager 提供了
 // getCurrentContainerView，这才是我们要挂材质的对象。
 
@@ -584,16 +356,28 @@ static void diPrepareNiceContainer(UIView *container) {
 }
 
 static void diApplyGlassToNiceCurrentContainer(UIView *container) {
-    if (!container || !lgHostEnabled(@"DynamicIsland")) return;
+    if (!container) return;
+    if (!lgHostEnabled(@"DynamicIsland")) return;
+
     @try {
-        // Test7：直接使用 Nice 动态添加的 backView/backgroundContainer 作为材质宿主。
         diPrepareNiceContainer(container);
-        diHideSystemApertureBackdropNodes(container, 0);
-        diApplyGlassToNiceMaterialHost(container);
-        NSLog(@"[SBLiquidGlass-DI] Test7 Nice current container = %@ frame=%@",
+        diClearBlackRenderingTree(container, 0);
+        diApplyGlassToView(container, YES);
+        diPrepareNiceContainer(container);
+        diClearBlackRenderingTree(container, 0);
+
+        LGLiveBackdropView *glass = objc_getAssociatedObject(container, kDIGlassKey);
+        if (glass) {
+            diPutNiceGlassBetweenBackgroundAndContent(container, glass);
+            diClearLargeBackgroundLayers(container.layer, container, 0);
+            diSyncNiceGlass(container, glass);
+            @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
+        }
+
+        NSLog(@"[SBLiquidGlass-DI] Nice current container = %@ frame=%@",
               NSStringFromClass(container.class), NSStringFromCGRect(container.frame));
     } @catch (NSException *e) {
-        NSLog(@"[SBLiquidGlass-DI] Test7 Nice container exception: %@", e);
+        NSLog(@"[SBLiquidGlass-DI] Nice container exception: %@", e);
     }
 }
 
