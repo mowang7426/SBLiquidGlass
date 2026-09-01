@@ -911,6 +911,12 @@ NSArray<NSDictionary *> *LGOverviewToggleItems(void) {
         LGSwitchSetting(@"GlobalControls.Sliders.Enabled",
                         @"滑条",
                         @"全局滑条液态玻璃效果", NO),
+        LGSwitchSetting(@"ContextMenu.Enabled",
+                        @"上下文菜单",
+                        @"上下文菜单液态玻璃效果", NO),
+        LGSwitchSetting(@"SearchPill.Enabled",
+                        @"搜索胶囊",
+                        @"搜索胶囊液态玻璃效果", NO),
     ];
 }
 
