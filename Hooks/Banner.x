@@ -59,11 +59,20 @@ static void LGUpdateNotificationAdaptiveOverlay(UIView *material) {
             objc_setAssociatedObject(material, kLGNotificationAdaptiveOverlayKey, overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
 
+        // 从用户偏好读取透明度，默认 0.12
+        CGFloat alpha = 0.12;
+        @try {
+            id alphaValue = LGGlassPreferenceValue(@"Notification.BackgroundAlpha");
+            if (alphaValue && [alphaValue respondsToSelector:@selector(floatValue)]) {
+                alpha = [alphaValue floatValue];
+            }
+        } @catch (__unused NSException *e) {}
+
         // 浅色模式叠加白色，深色模式叠加黑色，增强文字对比度
         if (material.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
-            overlay.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.12];
+            overlay.backgroundColor = [UIColor colorWithWhite:1.0 alpha:alpha];
         } else {
-            overlay.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.12];
+            overlay.backgroundColor = [UIColor colorWithWhite:0.0 alpha:alpha];
         }
 
         overlay.frame = material.frame;
