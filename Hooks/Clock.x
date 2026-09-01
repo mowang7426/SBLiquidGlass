@@ -2575,8 +2575,19 @@ static void LGRefreshAllClockHosts(void) {
 - (void)layoutSubviews {
     %orig;
     UIView *self_ = (UIView *)self;
-    // 优化：增加节流间隔，从 1/30 秒改成 1/10 秒，减少 CPU 占用
-    if (self_.window) LGScheduleClockApply(self_, NO, 1.0 / 10.0);
+    if (!self_.window) return;
+    // 优化1：只有视图大小真正变化时才重新应用，减少不必要的调用
+    NSValue *lastSizeValue = objc_getAssociatedObject(self_, @selector(lgClockLastLayoutSize));
+    CGSize currentSize = self_.bounds.size;
+    if (lastSizeValue) {
+        CGSize lastSize = [lastSizeValue CGSizeValue];
+        if (CGSizeEqualToSize(lastSize, currentSize)) {
+            return; // 大小没变化，跳过
+        }
+    }
+    objc_setAssociatedObject(self_, @selector(lgClockLastLayoutSize), [NSValue valueWithCGSize:currentSize], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    // 优化2：进一步增加节流间隔，从 1/10 秒改成 1/5 秒，减少 CPU 占用
+    LGScheduleClockApply(self_, NO, 1.0 / 5.0);
 }
 
 %end
