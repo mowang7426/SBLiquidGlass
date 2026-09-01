@@ -16,9 +16,50 @@
 @interface NBXLddClassic3View : UIView
 @end
 
-#pragma mark - 递归清除背景
+#pragma mark - KVO 监听背景色变化
 
-// 递归清除视图及其所有子视图的背景色
+static void *kDIKVOContext = &kDIKVOContext;
+static void *kDIGlassKey = &kDIGlassKey;
+static void *kDIObservingKey = &kDIObservingKey;
+
+@interface DIBackgroundObserver : NSObject
+@end
+
+@implementation DIBackgroundObserver
+
+- (void)observeValueForKeyPath:(NSString *)keyPath
+                      ofObject:(id)object
+                        change:(NSDictionary *)change
+                       context:(void *)context {
+    if (context == kDIKVOContext) {
+        @try {
+            if ([keyPath isEqualToString:@"backgroundColor"]) {
+                UIColor *newColor = change[NSKeyValueChangeNewKey];
+                if (newColor && newColor != (id)[NSNull null]) {
+                    CGFloat white = 0, alpha = 0;
+                    if ([newColor respondsToSelector:@selector(getWhite:alpha:)]) {
+                        [newColor getWhite:&white alpha:&alpha];
+                        // 如果是黑色或深色背景，改成透明
+                        if (white < 0.15 && alpha > 0.1) {
+                            dispatch_async(dispatch_get_main_queue(), ^{
+                                @try {
+                                    [object setBackgroundColor:[UIColor clearColor]];
+                                } @catch (__unused NSException *e) {}
+                            });
+                        }
+                    }
+                }
+            }
+        } @catch (__unused NSException *e) {}
+    }
+}
+
+@end
+
+static DIBackgroundObserver *sDIObserver = nil;
+
+#pragma mark - 递归清除背景（增强版）
+
 static void diClearBackgroundRecursive(UIView *view) {
     @try {
         if (!view) return;
@@ -36,39 +77,64 @@ static void diClearBackgroundRecursive(UIView *view) {
     } @catch (__unused NSException *e) {}
 }
 
+#pragma mark - 开始 KVO 监听
+
+static void diStartObservingView(UIView *view) {
+    @try {
+        if (!view || !sDIObserver) return;
+        if (objc_getAssociatedObject(view, kDIObservingKey)) return;
+        
+        // 监听当前视图
+        [view addObserver:sDIObserver
+               forKeyPath:@"backgroundColor"
+                  options:NSKeyValueObservingOptionNew
+                  context:kDIKVOContext];
+        objc_setAssociatedObject(view, kDIObservingKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        
+        // 递归监听子视图
+        for (UIView *subview in view.subviews) {
+            diStartObservingView(subview);
+        }
+    } @catch (__unused NSException *e) {}
+}
+
 #pragma mark - 液态玻璃效果实现
 
-static void *kDIGlassKey = &kDIGlassKey;
-static void *kDIClearedKey = &kDIClearedKey;
-
-// 应用液态玻璃效果到灵动岛视图
 static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
     @try {
         if (!view || !lgHostEnabled(@"DynamicIsland")) return;
         if (CGRectIsEmpty(view.bounds) || CGRectGetWidth(view.bounds) < 10) return;
         
-        NSLog(@"[SBLiquidGlass-DI] Applying to %@ (nice=%d) frame=%@",
-              NSStringFromClass(view.class), isNiceIsland, NSStringFromCGRect(view.frame));
+        NSLog(@"[SBLiquidGlass-DI] Applying to %@ (nice=%d)", NSStringFromClass(view.class), isNiceIsland);
         
-        // 如果是 nice 灵动岛，先递归清除所有背景
-        if (isNiceIsland && !objc_getAssociatedObject(view, kDIClearedKey)) {
+        // 如果是 nice 灵动岛，进行强力背景清除
+        if (isNiceIsland) {
+            // 立即清除
             diClearBackgroundRecursive(view);
-            objc_setAssociatedObject(view, kDIClearedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            NSLog(@"[SBLiquidGlass-DI] Cleared all backgrounds recursively");
+            
+            // 延迟清除（可能背景在后面才设置）
+            for (NSNumber *delay in @[@0.1, @0.3, @0.5, @1.0, @2.0]) {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay.doubleValue * NSEC_PER_SEC)),
+                               dispatch_get_main_queue(), ^{
+                    @try {
+                        diClearBackgroundRecursive(view);
+                    } @catch (__unused NSException *e) {}
+                });
+            }
+            
+            // 开始 KVO 监听
+            diStartObservingView(view);
+            
+            NSLog(@"[SBLiquidGlass-DI] Started aggressive background clearing");
         }
         
         // 检查是否已经应用了液态玻璃
         LGLiveBackdropView *glass = objc_getAssociatedObject(view, kDIGlassKey);
         if (glass) {
-            // 更新 frame
             if (isNiceIsland) {
-                if (!CGRectEqualToRect(glass.frame, view.frame)) {
-                    glass.frame = view.frame;
-                }
+                if (!CGRectEqualToRect(glass.frame, view.frame)) glass.frame = view.frame;
             } else {
-                if (!CGRectEqualToRect(glass.frame, view.bounds)) {
-                    glass.frame = view.bounds;
-                }
+                if (!CGRectEqualToRect(glass.frame, view.bounds)) glass.frame = view.bounds;
             }
             CGFloat cornerRadius = view.layer.cornerRadius > 0 ? view.layer.cornerRadius : CGRectGetHeight(view.bounds) * 0.5;
             if (fabs(glass.layer.cornerRadius - cornerRadius) > 0.5) {
@@ -80,7 +146,6 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
         NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
         if (!filterType) filterType = @"dylv.liquidglass.dynamicisland";
         
-        // 创建液态玻璃视图
         CGRect glassFrame = isNiceIsland ? view.frame : view.bounds;
         glass = [[LGLiveBackdropView alloc] initWithFrame:glassFrame
                                                  groupName:nil
@@ -94,21 +159,17 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
         glass.layer.masksToBounds = YES;
         
         if (isNiceIsland) {
-            // nice 灵动岛：添加到父视图中，位于 view 下面
             UIView *superview = view.superview;
             if (superview) {
                 [superview insertSubview:glass belowSubview:view];
-                NSLog(@"[SBLiquidGlass-DI] Inserted glass below view in superview: %@", NSStringFromClass(superview.class));
             }
         } else {
-            // 系统灵动岛：添加到内部最底层
             [view insertSubview:glass atIndex:0];
             view.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.1];
         }
         
         objc_setAssociatedObject(view, kDIGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         
-        // 延迟应用滤镜
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
         });
@@ -119,7 +180,6 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
     }
 }
 
-// 移除液态玻璃效果
 static void diRemoveGlass(UIView *view) {
     @try {
         LGLiveBackdropView *glass = objc_getAssociatedObject(view, kDIGlassKey);
@@ -127,7 +187,6 @@ static void diRemoveGlass(UIView *view) {
             [glass removeFromSuperview];
             objc_setAssociatedObject(view, kDIGlassKey, nil, OBJC_ASSOCIATION_ASSIGN);
         }
-        objc_setAssociatedObject(view, kDIClearedKey, nil, OBJC_ASSOCIATION_ASSIGN);
     } @catch (__unused NSException *e) {}
 }
 
@@ -203,6 +262,7 @@ static void diRemoveGlass(UIView *view) {
 
 %ctor {
     @try {
-        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (recursive background clear)");
+        sDIObserver = [[DIBackgroundObserver alloc] init];
+        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (KVO + aggressive clear)");
     } @catch (__unused NSException *e) {}
 }
