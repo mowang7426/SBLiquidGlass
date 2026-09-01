@@ -376,6 +376,15 @@ static NSArray<NSString *> *LGClockVariableFontDylibRelativePaths(void) {
 }
 
 static NSString *LGClockVariableFontPath(void) {
+    // 先从用户偏好读取自定义字体路径
+    @try {
+        NSString *customPath = LG_prefString(@"Clock.FontPath", @"");
+        if (customPath.length && [[NSFileManager defaultManager] fileExistsAtPath:customPath]) {
+            return customPath;
+        }
+    } @catch (__unused NSException *e) {}
+
+    // 如果用户没有设置或文件不存在，使用原有的硬编码候选路径
     static NSString *path = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -2473,7 +2482,8 @@ static void LGScheduleClockApply(UIView *host, BOOL includeRecoveryRetry, CFTime
 static void LGRequestClockApplyForSourceMutation(UIView *host) {
     if (!host || !LGIsClockHost(host)) return;
     if (LGIsModernClockHost(host) && host.window) {
-        LGScheduleClockApply(host, NO, 1.0 / 30.0);
+        // 优化：增加节流间隔，从 1/30 秒改成 1/10 秒
+        LGScheduleClockApply(host, NO, 1.0 / 10.0);
         return;
     }
     LGApplyClockReplacement(host);
@@ -2565,7 +2575,8 @@ static void LGRefreshAllClockHosts(void) {
 - (void)layoutSubviews {
     %orig;
     UIView *self_ = (UIView *)self;
-    if (self_.window) LGScheduleClockApply(self_, NO, 1.0 / 30.0);
+    // 优化：增加节流间隔，从 1/30 秒改成 1/10 秒，减少 CPU 占用
+    if (self_.window) LGScheduleClockApply(self_, NO, 1.0 / 10.0);
 }
 
 %end
