@@ -1,4 +1,8 @@
 #import "LGLiveBackdropView.h"
+#import <UIKit/UIKit.h>
+
+// 性能优化：应用是否在后台
+static BOOL sLGAppInBackground = NO;
 #import "LGHostRegistry.h"
 #import "LGCoverSheetState.h"
 #import <CoreMotion/CoreMotion.h>
@@ -367,6 +371,26 @@ static const CGFloat kLGSpecularBrightBoostOpacity = 0.70;
     self.opaque                 = NO;
 
     self.autoresizingMask       = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    
+    // 性能优化：注册前后台通知监听（只注册一次）
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidEnterBackgroundNotification
+                                                          object:nil
+                                                           queue:[NSOperationQueue mainQueue]
+                                                      usingBlock:^(NSNotification *note) {
+                                                          sLGAppInBackground = YES;
+                                                          NSLog(@"[SBLiquidGlass] App entered background, stopping rendering");
+                                                      }];
+        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationWillEnterForegroundNotification
+                                                          object:nil
+                                                           queue:[NSOperationQueue mainQueue]
+                                                      usingBlock:^(NSNotification *note) {
+                                                          sLGAppInBackground = NO;
+                                                          NSLog(@"[SBLiquidGlass] App will enter foreground, resuming rendering");
+                                                      }];
+    });
+    
     LGEnsureFilterRefreshObserver();
     [sLGAllGlasses addObject:self];
     LGEnsureMotionHighlights();
@@ -382,13 +406,23 @@ static const CGFloat kLGSpecularBrightBoostOpacity = 0.70;
 
 - (void)didMoveToWindow {
     [super didMoveToWindow];
-    [self applyFilters];
+    // 性能优化：延迟应用滤镜，避免频繁调用
+    if (self.window) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+                           @try { [self applyFilters]; } @catch (__unused NSException *e) {}
+                       });
+    }
 }
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
     [super traitCollectionDidChange:previousTraitCollection];
     if (previousTraitCollection.userInterfaceStyle != self.traitCollection.userInterfaceStyle) {
         _filterAttached = NO;
-        [self applyFilters];
+        // 性能优化：延迟应用滤镜
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+                           @try { [self applyFilters]; } @catch (__unused NSException *e) {}
+                       });
     }
 }
 
@@ -406,13 +440,20 @@ static const CGFloat kLGSpecularBrightBoostOpacity = 0.70;
 
 - (void)layoutSubviews  {
     [super layoutSubviews];
-    // 性能优化：添加节流+可见性检查，避免频繁调用导致发热
+    // 性能优化：添加节流+可见性检查+变化检测，避免频繁调用导致发热
     if (self.hidden || self.alpha < 0.01 || !self.window) return;
     if (CGRectIsEmpty(self.bounds) || CGRectGetWidth(self.bounds) < 1) return;
     
+    // 变化检测：只有 bounds 真正变化时才需要重新渲染
+    static CGRect sLastBounds = {0};
+    if (CGRectEqualToRect(self.bounds, sLastBounds)) {
+        return; // bounds 没变化，跳过渲染
+    }
+    sLastBounds = self.bounds;
+    
     static NSTimeInterval sLastApplyTime = 0;
     NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
-    if (now - sLastApplyTime > 0.1) { // 最多每100ms调用一次（约10fps）
+    if (now - sLastApplyTime > 0.15) { // 最多每150ms调用一次（约6-7fps）
         sLastApplyTime = now;
         [self applyFilters];
         [self updateSpecular];
@@ -473,7 +514,7 @@ static const CGFloat kLGSpecularBrightBoostOpacity = 0.70;
 
 - (void)updateSpecular {
     if (CGRectIsEmpty(self.bounds)) return;
-    if (self.hidden || self.alpha < 0.01 || !self.window) return;
+    if (self.hidden || self.alpha < 0.01 || !self.window || sLGAppInBackground) return;
 
     NSNumber *override = self.lgSpecularEnabledOverride;
     BOOL enabled = override ? override.boolValue
@@ -535,8 +576,8 @@ static const CGFloat kLGSpecularBrightBoostOpacity = 0.70;
 }
 
 - (void)applyFilters {
-    // 性能优化：不可见时跳过渲染
-    if (self.hidden || self.alpha < 0.01 || !self.window) return;
+    // 性能优化：不可见或应用在后台时跳过渲染
+    if (self.hidden || self.alpha < 0.01 || !self.window || sLGAppInBackground) return;
     CALayer *layer = self.layer;
     Class backdropCls = NSClassFromString(@"CABackdropLayer");
     if (!backdropCls || ![layer isKindOfClass:backdropCls]) return;
@@ -587,7 +628,10 @@ static const CGFloat kLGSpecularBrightBoostOpacity = 0.70;
             NSString *type = nil;
             @try { type = [existing.firstObject valueForKey:@"type"]; } @catch (...) {}
             if ([type isEqualToString:wantType]) {
-                return;
+                // filter 类型没变，检查 scale 是否变化
+                if (fabs(wantScale - _appliedScale) <= 0.02) {
+                    return; // 完全没变化，跳过
+                }
             }
         }
         if (!filterCls) { sblog("CAFilter class not found"); return; }
