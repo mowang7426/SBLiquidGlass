@@ -12,7 +12,7 @@ sbliquidglass_FILES     = Tweak.x Hooks/Dock.x Hooks/Folder.x Hooks/AppIcons.x H
                       Hooks/AppLibrary.x Hooks/SearchPill.x Hooks/Spotlight.x Hooks/Widgets.x Hooks/ContextMenu.x \
                       Hooks/QuickActions.x Hooks/Passcode.x Hooks/Clock.x Hooks/Alerts.x \
                       Hooks/PreferencesControls.x Hooks/CoverSheet.x Hooks/TabBar.x \
-                      Hooks/Keyboard.x \
+                      Hooks/Keyboard.x Hooks/DynamicIsland.x \
                       SBLiquidGlassPrefs/LGPrefsLiquidSlider.m \
                       SBLiquidGlassPrefs/LGPrefsLiquidSwitch.m \
                       Shared/LGGlassKit.x Shared/LGLiveBackdropView.m \
