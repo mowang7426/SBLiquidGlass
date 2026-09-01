@@ -51,11 +51,9 @@ static void diSafeApplyGlass(UIView *view) {
         glass.layer.masksToBounds = YES;
         glass.alpha = 0.9;
         
-        // 插入到目标视图的下面
-        UIView *superview = view.superview;
-        if (superview) {
-            [superview insertSubview:glass belowSubview:view];
-        }
+        // 直接添加到目标视图内部，作为最底层的子视图
+        [view insertSubview:glass atIndex:0];
+        glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         
         // 关联到目标视图
         objc_setAssociatedObject(view, kDIGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
