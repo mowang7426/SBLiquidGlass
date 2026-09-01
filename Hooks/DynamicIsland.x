@@ -20,53 +20,60 @@
 
 static void *kDIGlassKey = &kDIGlassKey;
 
-#pragma mark - 检查视图是否在灵动岛层级中
+#pragma mark - 把背景改成半透明（模拟小白点效果）
 
-static BOOL diIsInDynamicIslandHierarchy(UIView *view) {
-    @try {
-        UIView *candidate = view;
-        for (NSInteger level = 0; candidate && level < 15; level++, candidate = candidate.superview) {
-            NSString *className = NSStringFromClass(candidate.class);
-            if ([className containsString:@"Aperture"] ||
-                [className containsString:@"DynamicIsland"] ||
-                [className containsString:@"Island"] ||
-                [className hasPrefix:@"NBX"] ||
-                [className containsString:@"NiceAperture"]) {
-                return YES;
-            }
-        }
-    } @catch (__unused NSException *e) {}
-    return NO;
-}
-
-#pragma mark - 超级彻底的背景清除（递归）
-
-static void diUltimateClearBackground(UIView *view) {
+static void diMakeBackgroundSemiTransparent(UIView *view) {
     @try {
         if (!view) return;
         
-        // 1. 清除 backgroundColor
-        view.backgroundColor = [UIColor clearColor];
-        
-        // 2. 清除 layer.backgroundColor
-        view.layer.backgroundColor = [UIColor clearColor].CGColor;
-        
-        // 3. 清除 layer.contents（如果是黑色图片）
-        if (view.layer.contents) {
-            // 检查 contents 是否是图片
-            if ([view.layer.contents isKindOfClass:[UIImage class]] ||
-                CFGetTypeID((__bridge CFTypeRef)view.layer.contents) == CGImageGetTypeID()) {
-                view.layer.contents = nil;
+        // 1. 把当前视图的背景改成半透明的黑色（alpha 0.15），模拟小白点的效果
+        UIColor *currentBG = view.backgroundColor;
+        if (currentBG) {
+            CGFloat white = 0, alpha = 0;
+            if ([currentBG respondsToSelector:@selector(getWhite:alpha:)]) {
+                [currentBG getWhite:&white alpha:&alpha];
+                // 如果是深色背景，改成半透明
+                if (white < 0.3 && alpha > 0.1) {
+                    view.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.12];
+                }
             }
         }
         
-        // 4. 如果是 UIVisualEffectView，清除 effect
-        if ([view isKindOfClass:NSClassFromString(@"UIVisualEffectView")]) {
-            UIVisualEffectView *ev = (UIVisualEffectView *)view;
-            ev.effect = nil;
+        // 2. 把 layer.backgroundColor 也改成半透明
+        if (view.layer.backgroundColor) {
+            UIColor *layerBG = [UIColor colorWithCGColor:view.layer.backgroundColor];
+            CGFloat white = 0, alpha = 0;
+            if ([layerBG respondsToSelector:@selector(getWhite:alpha:)]) {
+                [layerBG getWhite:&white alpha:&alpha];
+                if (white < 0.3 && alpha > 0.1) {
+                    view.layer.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.12].CGColor;
+                }
+            }
         }
         
-        // 5. 尝试查找并隐藏背景视图（通过属性名）
+        // 3. 通过 KVC 访问 backgroundContainer，把它改成半透明
+        @try {
+            id bgContainer = [view valueForKey:@"backgroundContainer"];
+            if (bgContainer && [bgContainer isKindOfClass:[UIView class]]) {
+                UIView *bg = (UIView *)bgContainer;
+                bg.alpha = 0.15;
+                bg.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.12];
+                NSLog(@"[SBLiquidGlass-DI] Made backgroundContainer semi-transparent");
+            }
+        } @catch (__unused NSException *e) {}
+        
+        // 4. 通过 KVC 访问 bgView，把它改成半透明
+        @try {
+            id bgView = [view valueForKey:@"bgView"];
+            if (bgView && [bgView isKindOfClass:[UIView class]]) {
+                UIView *bg = (UIView *)bgView;
+                bg.alpha = 0.15;
+                bg.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.12];
+                NSLog(@"[SBLiquidGlass-DI] Made bgView semi-transparent");
+            }
+        } @catch (__unused NSException *e) {}
+        
+        // 5. 遍历对象的所有属性，查找背景相关的属性，改成半透明
         unsigned int count = 0;
         Ivar *ivars = class_copyIvarList([view class], &count);
         for (unsigned int i = 0; i < count; i++) {
@@ -74,30 +81,31 @@ static void diUltimateClearBackground(UIView *view) {
             const char *name = ivar_getName(ivar);
             if (name) {
                 NSString *ivarName = [NSString stringWithUTF8String:name];
-                // 查找背景相关的属性
-                if ([ivarName.lowercaseString containsString:@"bgview"] ||
-                    [ivarName.lowercaseString containsString:@"backgroundview"] ||
+                if ([ivarName.lowercaseString containsString:@"bg"] ||
+                    [ivarName.lowercaseString containsString:@"background"] ||
                     [ivarName.lowercaseString containsString:@"backdrop"] ||
-                    [ivarName.lowercaseString containsString:@"blackview"]) {
-                    id bgView = object_getIvar(view, ivar);
-                    if (bgView && [bgView isKindOfClass:[UIView class]]) {
-                        UIView *bg = (UIView *)bgView;
-                        bg.hidden = YES;
-                        bg.alpha = 0.0;
-                        bg.backgroundColor = [UIColor clearColor];
-                        NSLog(@"[SBLiquidGlass-DI] Hid background ivar: %@", ivarName);
-                    }
+                    [ivarName.lowercaseString containsString:@"black"] ||
+                    [ivarName.lowercaseString containsString:@"platter"]) {
+                    @try {
+                        id bgView = object_getIvar(view, ivar);
+                        if (bgView && [bgView isKindOfClass:[UIView class]]) {
+                            UIView *bg = (UIView *)bgView;
+                            bg.alpha = 0.15;
+                            bg.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.12];
+                            NSLog(@"[SBLiquidGlass-DI] Made ivar semi-transparent: %@", ivarName);
+                        }
+                    } @catch (__unused NSException *e) {}
                 }
             }
         }
         if (ivars) free(ivars);
         
-        // 6. 递归清除子视图
+        // 6. 递归处理子视图
         for (UIView *subview in view.subviews) {
-            diUltimateClearBackground(subview);
+            diMakeBackgroundSemiTransparent(subview);
         }
     } @catch (__unused NSException *e) {
-        NSLog(@"[SBLiquidGlass-DI] Clear exception: %@", e);
+        NSLog(@"[SBLiquidGlass-DI] Semi-transparent exception: %@", e);
     }
 }
 
@@ -110,17 +118,17 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
         
         NSLog(@"[SBLiquidGlass-DI] Applying to %@ (nice=%d)", NSStringFromClass(view.class), isNiceIsland);
         
-        // 如果是 nice 灵动岛，进行超级彻底的背景清除
+        // 如果是 nice 灵动岛，把背景改成半透明（模拟小白点效果）
         if (isNiceIsland) {
-            diUltimateClearBackground(view);
-            // 延迟持续清除（背景可能在后面才设置）
-            for (NSNumber *delay in @[@0.1, @0.3, @0.5, @1.0, @2.0, @3.0, @5.0]) {
+            diMakeBackgroundSemiTransparent(view);
+            // 延迟持续修改（背景可能在后面才设置）
+            for (NSNumber *delay in @[@0.1, @0.3, @0.5, @1.0, @2.0, @3.0]) {
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay.doubleValue * NSEC_PER_SEC)),
                                dispatch_get_main_queue(), ^{
-                    @try { diUltimateClearBackground(view); } @catch (__unused NSException *e) {}
+                    @try { diMakeBackgroundSemiTransparent(view); } @catch (__unused NSException *e) {}
                 });
             }
-            NSLog(@"[SBLiquidGlass-DI] Ultimate background clear done");
+            NSLog(@"[SBLiquidGlass-DI] Made background semi-transparent (AssistiveTouch style)");
         }
         
         // 检查是否已经应用了液态玻璃
@@ -152,6 +160,7 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
         glass.layer.cornerRadius = cornerRadius;
         glass.layer.cornerCurve = kCACornerCurveContinuous;
         glass.layer.masksToBounds = YES;
+        glass.alpha = 0.85; // 液态玻璃效果稍微透明一点，模拟小白点效果
         
         if (isNiceIsland) {
             UIView *superview = view.superview;
@@ -169,7 +178,7 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
             @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
         });
         
-        NSLog(@"[SBLiquidGlass-DI] Done applying glass");
+        NSLog(@"[SBLiquidGlass-DI] Done applying glass (AssistiveTouch style)");
     } @catch (__unused NSException *e) {
         NSLog(@"[SBLiquidGlass-DI] Exception: %@", e);
     }
@@ -257,6 +266,6 @@ static void diRemoveGlass(UIView *view) {
 
 %ctor {
     @try {
-        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (ultimate clear version)");
+        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (AssistiveTouch semi-transparent style)");
     } @catch (__unused NSException *e) {}
 }
