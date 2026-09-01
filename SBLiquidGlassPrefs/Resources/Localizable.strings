@@ -310,3 +310,10 @@
 
 "prefs.notification.background_alpha.title" = "透明度";
 "prefs.notification.background_alpha.subtitle" = "调整通知中心背景的透明度。";
+
+"prefs.control_center.title" = "控制中心";
+"prefs.control_center.subtitle" = "控制中心的液态玻璃效果。";
+"prefs.control_center.corner_radius.title" = "圆角";
+"prefs.control_center.corner_radius.subtitle" = "调整控制中心模块的圆角比例。";
+"prefs.control_center.background_blur.title" = "背景模糊";
+"prefs.control_center.background_blur.subtitle" = "调整控制中心背景的模糊程度。";
