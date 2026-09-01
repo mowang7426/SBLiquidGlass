@@ -16,6 +16,9 @@
 @interface NBXLddClassic3View : UIView
 @end
 
+@interface _SBAdaptiveKeyLineBackdropView : UIView
+@end
+
 @interface ArtWorkManager : NSObject
 + (instancetype)shared;
 - (UIView *)getCurrentContainerView;
@@ -335,7 +338,7 @@ static BOOL diNiceIsActiveInsideAperture(UIView *aperture) {
         if (!cls || ![cls respondsToSelector:@selector(shared)]) return NO;
         ArtWorkManager *mgr = [cls shared];
         if (!mgr || ![mgr respondsToSelector:@selector(getCurrentContainerView)]) return NO;
-        UIView *nice = [mgr getCurrentContainerView];
+        UIView *nice = (UIView *)[mgr getCurrentContainerView];
         if (!nice) return NO;
         for (UIView *v = nice; v; v = v.superview) {
             if (v == aperture) return YES;
@@ -517,7 +520,7 @@ static void diApplyGlassToNiceMaterialHost(UIView *container) {
         if (underAperture && niceMgrClass && [niceMgrClass respondsToSelector:@selector(shared)]) {
             ArtWorkManager *mgr = [niceMgrClass shared];
             UIView *nice = [mgr respondsToSelector:@selector(getCurrentContainerView)] ?
-                [mgr getCurrentContainerView] : nil;
+                (UIView *)[mgr getCurrentContainerView] : nil;
             if (nice) {
                 %orig(nil);
                 self.alpha = 0.0;
@@ -544,7 +547,7 @@ static void diApplyGlassToNiceMaterialHost(UIView *container) {
             if (niceMgrClass && [niceMgrClass respondsToSelector:@selector(shared)]) {
                 ArtWorkManager *mgr = [niceMgrClass shared];
                 UIView *nice = [mgr respondsToSelector:@selector(getCurrentContainerView)] ?
-                    [mgr getCurrentContainerView] : nil;
+                    (UIView *)[mgr getCurrentContainerView] : nil;
                 if (nice) {
                     self.alpha = 0.0;
                     self.backgroundColor = UIColor.clearColor;
