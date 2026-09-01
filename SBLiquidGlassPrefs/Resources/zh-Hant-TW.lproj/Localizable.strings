@@ -278,3 +278,19 @@
 
 "prefs.settings.section.app_exclusion.title" = "应用排除";
 "prefs.settings.section.app_exclusion.subtitle" = "在指定应用中禁用液态玻璃效果。";
+
+"prefs.lockscreen_clock.title" = "锁屏时间";
+"prefs.lockscreen_clock.subtitle" = "控制锁屏时间的样式和效果。";
+"prefs.lockscreen_clock.enabled.title" = "锁屏时间";
+"prefs.lockscreen_clock.enabled.subtitle" = "启用锁屏时间的液态玻璃效果。";
+"prefs.lockscreen_clock.font_size.title" = "字体大小";
+"prefs.lockscreen_clock.font_size.subtitle" = "调整锁屏时间的字体大小。";
+"prefs.lockscreen_clock.frost.title" = "磨砂";
+"prefs.lockscreen_clock.frost.subtitle" = "启用锁屏时间的磨砂效果。";
+"prefs.lockscreen_clock.blur.title" = "模糊";
+"prefs.lockscreen_clock.blur.subtitle" = "调整锁屏时间的模糊程度。";
+"prefs.lockscreen_clock.font_path.title" = "字体路径";
+"prefs.lockscreen_clock.font_path.subtitle" = "输入自定义字体文件的路径。";
+
+"prefs.overview.toggle.clock" = "锁屏时间";
+"prefs.overview.toggle.clock.subtitle" = "锁屏时间液态玻璃效果。";
