@@ -182,11 +182,11 @@ static id LGCreateNativeGaussianFilter(Class filterCls, CGFloat radius) {
 static const CGFloat kLGScaleMax    = 0.75;
 static const CGFloat kLGScaleMin    = 0.25;
 
-static const CGFloat kLGClockCaptureScale = 0.50;
+static const CGFloat kLGClockCaptureScale = 0.35; // 性能优化：从0.5降低到0.35
 
-static const CGFloat kLGCoverSheetCaptureScale = 1.00;
+static const CGFloat kLGCoverSheetCaptureScale = 0.60; // 性能优化：从1.0降低到0.6，减少GPU采样开销
 
-static const CGFloat kLGPrefsControlScale = 1.50;
+static const CGFloat kLGPrefsControlScale = 0.80; // 性能优化：从1.5降低到0.8，减少GPU采样开销
 static const CGFloat kLGDefaultScaleBudget = 8000.0;
 static CGFloat LGQualityValue(void) {
     id value = LGGlassPreferenceValue(@"Global.Quality");
@@ -245,14 +245,24 @@ static void LGEnsureFilterRefreshObserver(void) {
 }
 
 static void LGApplyMotionHighlightAngle(void) {
+    // 性能优化：只更新可见的玻璃视图，并且限制同时更新的数量
+    NSInteger updatedCount = 0;
     for (LGLiveBackdropView *glass in sLGMotionGlasses.allObjects) {
         if (!glass.window || glass.hidden || glass.alpha <= 0.001) continue;
+        if (sLGAppInBackground) continue; // 后台时不更新
         [glass applySpecularAngle:sLGSpecularAngle];
+        updatedCount++;
+        if (updatedCount > 12) break; // 最多同时更新12个，避免CPU峰值
     }
 }
 
 static void LGRefreshMotionHighlights(void) {
     if (!sLGMotionSetup || !LGIsSpringBoardBundle()) return;
+    if (sLGAppInBackground) { // 后台时停止加速度计
+        [sLGMotionManager stopDeviceMotionUpdates];
+        sLGMotionRunning = NO;
+        return;
+    }
     if (!sLGMotionEnabled) {
         [sLGMotionManager stopDeviceMotionUpdates];
         sLGMotionRunning = NO;
@@ -267,7 +277,7 @@ static void LGRefreshMotionHighlights(void) {
         ? CMAttitudeReferenceFrameXMagneticNorthZVertical
         : CMAttitudeReferenceFrameXArbitraryCorrectedZVertical;
 
-    sLGMotionManager.deviceMotionUpdateInterval = 1.0 / 10.0;
+    sLGMotionManager.deviceMotionUpdateInterval = 1.0 / 4.0; // 性能优化：从10Hz降低到4Hz，减少加速度计耗电
     sLGMotionRunning = YES;
     [sLGMotionManager startDeviceMotionUpdatesUsingReferenceFrame:frame
                                                             toQueue:NSOperationQueue.mainQueue
@@ -281,8 +291,9 @@ static void LGRefreshMotionHighlights(void) {
         CGFloat delta = atan2(sin(target - sLGSpecularAngle), cos(target - sLGSpecularAngle));
         CGFloat nextAngle = sLGSpecularAngle + delta * 0.40;
         static CGFloat lastAppliedAngle = CGFLOAT_MAX;
+        // 性能优化：增加变化阈值，从0.025增加到0.08，减少不必要的更新
         if (lastAppliedAngle == CGFLOAT_MAX ||
-            fabs(atan2(sin(nextAngle - lastAppliedAngle), cos(nextAngle - lastAppliedAngle))) >= 0.025) {
+            fabs(atan2(sin(nextAngle - lastAppliedAngle), cos(nextAngle - lastAppliedAngle))) >= 0.08) {
             sLGSpecularAngle = nextAngle;
             lastAppliedAngle = nextAngle;
             LGApplyMotionHighlightAngle();
