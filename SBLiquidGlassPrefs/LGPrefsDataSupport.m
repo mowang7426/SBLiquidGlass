@@ -905,6 +905,12 @@ NSArray<NSDictionary *> *LGOverviewToggleItems(void) {
         LGSwitchSetting(@"SettingsControls.Enabled",
                         LGLocalized(@"prefs.overview.toggle.settings_controls"),
                         LGLocalized(@"prefs.overview.toggle.settings_controls.subtitle"), NO),
+        LGSwitchSetting(@"GlobalControls.Switches.Enabled",
+                        @"开关",
+                        @"全局开关液态玻璃效果", YES),
+        LGSwitchSetting(@"GlobalControls.Sliders.Enabled",
+                        @"滑条",
+                        @"全局滑条液态玻璃效果", NO),
     ];
 }
 
