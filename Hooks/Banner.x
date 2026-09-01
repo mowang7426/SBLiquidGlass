@@ -3,6 +3,49 @@
 #import "../Shared/LGGlassKit.h"
 #import <objc/runtime.h>
 
+#pragma mark - 通知横幅半透明处理（清除原始背景，让液态玻璃显示出来）
+
+static void *kLGBannerTransparentKey = &kLGBannerTransparentKey;
+
+static void LGClearBannerBackground(UIView *material, BOOL isTopBanner) {
+    @try {
+        if (!material || !material.superview) return;
+        
+        // 只对顶部横幅（Banner）清除背景，通知中心的通知保持原样
+        if (!isTopBanner) return;
+        
+        // 彻底清除 MTMaterialView 的背景，让液态玻璃效果显示出来
+        material.backgroundColor = [UIColor clearColor];
+        material.alpha = 1.0;
+        material.hidden = NO;
+        
+        // 清除 layer 背景
+        if (material.layer.backgroundColor) {
+            material.layer.backgroundColor = [UIColor clearColor].CGColor;
+        }
+        
+        // 遍历子视图，清除所有背景
+        for (UIView *sub in [material.subviews copy]) {
+            sub.backgroundColor = [UIColor clearColor];
+            if (sub.layer.backgroundColor) {
+                sub.layer.backgroundColor = [UIColor clearColor].CGColor;
+            }
+            // 如果是 UIVisualEffectView，关闭 effect
+            if ([sub isKindOfClass:[UIVisualEffectView class]]) {
+                UIVisualEffectView *ev = (UIVisualEffectView *)sub;
+                ev.effect = nil;
+            }
+        }
+        
+        // 标记已经处理过
+        objc_setAssociatedObject(material, kLGBannerTransparentKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        
+        NSLog(@"[SBLiquidGlass-Banner] Background cleared for transparent effect");
+    } @catch (NSException *e) {
+        NSLog(@"[SBLiquidGlass-Banner] Clear background exception: %@", e);
+    }
+}
+
 static BOOL LGHasMaterialAncestorBefore(UIView *material, NSString *stopClassName) {
     Class stopCls = NSClassFromString(stopClassName);
     Class materialClass = NSClassFromString(@"MTMaterialView");
@@ -164,6 +207,10 @@ static void LGUpdatePlatterGlass(UIView *material) {
         // 通知中心背景自适应（仅 Notification，不影响顶部横幅 Banner）
         if ([prefix isEqualToString:@"Notification"]) {
             LGUpdateNotificationAdaptiveOverlay(material);
+        }
+        // 顶部横幅清除原始背景，实现半透明液态玻璃效果
+        if ([prefix isEqualToString:@"Banner"]) {
+            LGClearBannerBackground(material, topBanner);
         }
     } else if (LGIsPlatterActionMaterial(material)) {
 
