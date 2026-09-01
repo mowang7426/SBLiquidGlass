@@ -2049,7 +2049,8 @@ static UIView *LGClockOverlayContainerForHost(UIView *host) {
     self.maskLabel.frame = textFrame;
     [self lg_applyMaskLabel];
 
-    if ([self lg_maskNeedsRebuildForBounds:self.bounds]) {
+    // 优化：禁用 mask 图像生成和写入，减少内存占用（液态玻璃效果已禁用，不需要 mask）
+    if (NO && [self lg_maskNeedsRebuildForBounds:self.bounds]) {
         UIImage *image = [self lg_maskImageForBounds:self.bounds];
         if (image) {
             self.cachedMaskBounds = self.bounds;
