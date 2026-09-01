@@ -5,53 +5,59 @@
 #import "../Shared/LGSharedSupport.h"
 #import <objc/runtime.h>
 
-#pragma mark - 灵动岛视图识别
+#pragma mark - 灵动岛视图识别（通过位置和尺寸）
 
 static void *kDIGlassKey = &kDIGlassKey;
+static void *kDIAppliedKey = &kDIAppliedKey;
 
-// 检查视图是否在灵动岛的视图层级中
-static BOOL diIsInDynamicIslandHierarchy(UIView *view) {
+// 检查视图是否在灵动岛的位置（屏幕顶部中央）
+static BOOL diIsInDynamicIslandPosition(UIView *view) {
     @try {
-        UIView *candidate = view;
-        for (NSInteger level = 0; candidate && level < 20; level++, candidate = candidate.superview) {
-            NSString *className = NSStringFromClass(candidate.class);
-            if ([className containsString:@"Aperture"] ||
-                [className containsString:@"DynamicIsland"] ||
-                [className containsString:@"Island"] ||
-                [className hasPrefix:@"NBX"] ||
-                [className containsString:@"NiceAperture"] ||
-                [className containsString:@"NiceIsland"]) {
-                return YES;
-            }
-        }
         UIWindow *window = view.window;
-        if (window) {
-            NSString *windowClass = NSStringFromClass(window.class);
-            if ([windowClass containsString:@"Aperture"] ||
-                [windowClass containsString:@"DynamicIsland"] ||
-                [windowClass containsString:@"Island"]) {
-                return YES;
-            }
-        }
+        if (!window) return NO;
+        
+        CGRect frameInWindow = [view convertRect:view.bounds toView:window];
+        CGRect screenBounds = window.bounds;
+        
+        CGFloat centerX = CGRectGetMidX(frameInWindow);
+        CGFloat screenCenterX = CGRectGetMidX(screenBounds);
+        CGFloat topY = CGRectGetMinY(frameInWindow);
+        CGFloat width = CGRectGetWidth(frameInWindow);
+        CGFloat height = CGRectGetHeight(frameInWindow);
+        
+        // 灵动岛通常在屏幕顶部中央
+        BOOL isNearTop = topY < 100.0 && topY >= 0.0;
+        BOOL isNearCenter = fabs(centerX - screenCenterX) < 200.0;
+        // 灵动岛尺寸范围
+        BOOL hasReasonableSize = width > 80.0 && width < 500.0 && height > 15.0 && height < 120.0;
+        // 宽高比（灵动岛通常是宽大于高）
+        BOOL hasReasonableRatio = width > height * 1.5;
+        
+        return isNearTop && isNearCenter && hasReasonableSize && hasReasonableRatio;
     } @catch (__unused NSException *e) {}
     return NO;
 }
 
-// 检查是否是灵动岛的材质视图
-static BOOL diIsDynamicIslandMaterial(UIView *mat) {
+// 检查视图是否适合作为液态玻璃的目标（有背景色或模糊效果）
+static BOOL diIsSuitableForGlass(UIView *view) {
     @try {
-        NSString *className = NSStringFromClass(mat.class);
-        BOOL isMaterial = [className containsString:@"Material"] ||
-                          [className containsString:@"Backdrop"] ||
-                          [className containsString:@"Blur"] ||
-                          [className containsString:@"Glass"] ||
-                          [className containsString:@"VisualEffect"] ||
-                          [className containsString:@"KeyLine"];
-        if (!isMaterial) return NO;
-        if (!diIsInDynamicIslandHierarchy(mat)) return NO;
-        CGFloat w = CGRectGetWidth(mat.bounds), h = CGRectGetHeight(mat.bounds);
-        if (w < 10.0 || h < 5.0) return NO;
-        return YES;
+        // 排除已经应用了液态玻璃的视图
+        if (objc_getAssociatedObject(view, kDIAppliedKey)) return NO;
+        
+        // 排除 LGLiveBackdropView 本身
+        if ([view isKindOfClass:NSClassFromString(@"LGLiveBackdropView")]) return NO;
+        
+        // 排除纯透明视图
+        if (view.alpha < 0.1) return NO;
+        if (view.hidden) return NO;
+        
+        // 检查是否有背景色或模糊效果
+        BOOL hasBackgroundColor = view.backgroundColor && CGColorGetAlpha(view.backgroundColor.CGColor) > 0.01;
+        BOOL isVisualEffectView = [view isKindOfClass:NSClassFromString(@"UIVisualEffectView")];
+        BOOL hasBlur = [view isKindOfClass:NSClassFromString(@"MTMaterialView")] ||
+                       [view isKindOfClass:NSClassFromString(@"_SBAdaptiveKeyLineBackdropView")];
+        
+        return hasBackgroundColor || isVisualEffectView || hasBlur;
     } @catch (__unused NSException *e) {}
     return NO;
 }
@@ -61,74 +67,66 @@ static BOOL diIsDynamicIslandMaterial(UIView *mat) {
 static void diApplyGlassToView(UIView *view) {
     @try {
         if (!lgHostEnabled(@"DynamicIsland")) return;
+        if (!diIsInDynamicIslandPosition(view)) return;
+        if (!diIsSuitableForGlass(view)) return;
         
-        LGLiveBackdropView *existing = objc_getAssociatedObject(view, kDIGlassKey);
-        if (existing) {
-            existing.hidden = NO;
-            existing.frame = view.bounds;
-            return;
-        }
+        // 标记已经应用
+        objc_setAssociatedObject(view, kDIAppliedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         
-        NSLog(@"[SBLiquidGlass-DI] Applying glass to view: %@ frame=%@",
-              NSStringFromClass(view.class), NSStringFromCGRect(view.frame));
+        NSLog(@"[SBLiquidGlass-DI] Found dynamic island view: %@ frame=%@ backgroundColor=%@",
+              NSStringFromClass(view.class), NSStringFromCGRect(view.frame), view.backgroundColor);
         
-        CGFloat cornerRadius = CGRectGetHeight(view.bounds) * 0.5;
-        LGLiveBackdropView *glass = LGInstallRegisteredGlassInMaterial(view, kDIGlassKey, @"DynamicIsland",
-                                                                         UIEdgeInsetsZero, cornerRadius, nil);
-        if (glass) {
-            NSLog(@"[SBLiquidGlass-DI] Glass applied successfully to %@", NSStringFromClass(view.class));
+        // 获取 filterType
+        NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
+        if (!filterType) filterType = @"dylv.liquidglass.dynamicisland";
+        
+        // 创建液态玻璃背景视图
+        LGLiveBackdropView *glass = [[LGLiveBackdropView alloc] initWithFrame:view.bounds
+                                                                       groupName:nil
+                                                                      filterType:filterType];
+        glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        glass.layer.cornerRadius = view.layer.cornerRadius > 0 ? view.layer.cornerRadius : CGRectGetHeight(view.bounds) * 0.5;
+        glass.layer.cornerCurve = kCACornerCurveContinuous;
+        glass.layer.masksToBounds = YES;
+        
+        // 插入到目标视图的下面
+        UIView *superview = view.superview;
+        if (superview) {
+            [superview insertSubview:glass belowSubview:view];
         } else {
-            NSLog(@"[SBLiquidGlass-DI] Failed to apply glass to %@", NSStringFromClass(view.class));
+            [view addSubview:glass];
         }
+        
+        // 关联到目标视图
+        objc_setAssociatedObject(view, kDIGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        
+        // 应用滤镜（延迟应用，确保视图已经布局完成）
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            @try {
+                [glass applyFilters];
+            } @catch (__unused NSException *e) {}
+        });
+        
+        NSLog(@"[SBLiquidGlass-DI] Glass applied successfully to %@", NSStringFromClass(view.class));
     } @catch (__unused NSException *e) {
         NSLog(@"[SBLiquidGlass-DI] Exception while applying glass: %@", e);
     }
 }
 
-static void diApplyGlassToMaterial(UIView *mat) {
-    @try {
-        if (!diIsDynamicIslandMaterial(mat)) return;
-        diApplyGlassToView(mat);
-    } @catch (__unused NSException *e) {}
-}
-
 static void diRemoveGlassFromView(UIView *view) {
     @try {
-        LGLiveBackdropView *existing = objc_getAssociatedObject(view, kDIGlassKey);
-        if (existing) {
-            [existing removeFromSuperview];
+        LGLiveBackdropView *glass = objc_getAssociatedObject(view, kDIGlassKey);
+        if (glass) {
+            [glass removeFromSuperview];
             objc_setAssociatedObject(view, kDIGlassKey, nil, OBJC_ASSOCIATION_ASSIGN);
         }
+        objc_setAssociatedObject(view, kDIAppliedKey, nil, OBJC_ASSOCIATION_ASSIGN);
     } @catch (__unused NSException *e) {}
 }
 
-#pragma mark - Hook 系统灵动岛的材质视图
+#pragma mark - Hook UIView（通用识别）
 
-%hook MTMaterialView
-
-- (void)didMoveToWindow {
-    %orig;
-    @try {
-        if (self.window) {
-            diApplyGlassToMaterial(self);
-        } else {
-            diRemoveGlassFromView(self);
-        }
-    } @catch (__unused NSException *e) {}
-}
-
-- (void)layoutSubviews {
-    %orig;
-    @try {
-        diApplyGlassToMaterial(self);
-    } @catch (__unused NSException *e) {}
-}
-
-%end
-
-#pragma mark - Hook nice 灵动岛的自定义视图
-
-%hook NBXLddClassic2View
+%hook UIView
 
 - (void)didMoveToWindow {
     %orig;
@@ -145,52 +143,12 @@ static void diRemoveGlassFromView(UIView *view) {
     %orig;
     @try {
         diApplyGlassToView(self);
-    } @catch (__unused NSException *e) {}
-}
-
-%end
-
-%hook NBXLddClassic3View
-
-- (void)didMoveToWindow {
-    %orig;
-    @try {
-        if (self.window) {
-            diApplyGlassToView(self);
-        } else {
-            diRemoveGlassFromView(self);
+        // 更新已有的液态玻璃视图的 frame
+        LGLiveBackdropView *glass = objc_getAssociatedObject(self, kDIGlassKey);
+        if (glass) {
+            glass.frame = self.bounds;
+            glass.layer.cornerRadius = self.layer.cornerRadius > 0 ? self.layer.cornerRadius : CGRectGetHeight(self.bounds) * 0.5;
         }
-    } @catch (__unused NSException *e) {}
-}
-
-- (void)layoutSubviews {
-    %orig;
-    @try {
-        diApplyGlassToView(self);
-    } @catch (__unused NSException *e) {}
-}
-
-%end
-
-#pragma mark - Hook 系统灵动岛容器视图
-
-%hook SBSystemApertureContainerView
-
-- (void)didMoveToWindow {
-    %orig;
-    @try {
-        if (self.window) {
-            diApplyGlassToView(self);
-        } else {
-            diRemoveGlassFromView(self);
-        }
-    } @catch (__unused NSException *e) {}
-}
-
-- (void)layoutSubviews {
-    %orig;
-    @try {
-        diApplyGlassToView(self);
     } @catch (__unused NSException *e) {}
 }
 
@@ -198,6 +156,6 @@ static void diRemoveGlassFromView(UIView *view) {
 
 %ctor {
     @try {
-        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (fixed parameter count)");
+        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (position-based detection)");
     } @catch (__unused NSException *e) {}
 }
