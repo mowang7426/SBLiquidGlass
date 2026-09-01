@@ -1766,6 +1766,7 @@ static UIView *LGClockOverlayContainerForHost(UIView *host) {
 
 @interface LGClockGlassView : UIView
 @property (nonatomic, strong) LGClockBackdropView *glassView;
+@property (nonatomic, strong) UIVisualEffectView *frostView; // 磨砂背景视图
 @property (nonatomic, strong) UILabel *maskLabel;
 @property (nonatomic, copy) NSString *displayText;
 @property (nonatomic, copy) NSAttributedString *displayAttributedText;
@@ -1862,6 +1863,14 @@ static UIView *LGClockOverlayContainerForHost(UIView *host) {
     _maskLabel.textColor = UIColor.whiteColor;
     _maskLabel.backgroundColor = UIColor.clearColor;
     _maskLabel.numberOfLines = 1;
+
+    // 磨砂背景视图
+    _frostView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleLight]];
+    _frostView.frame = self.bounds;
+    _frostView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _frostView.hidden = YES;
+    _frostView.userInteractionEnabled = NO;
+    [self insertSubview:_frostView belowSubview:_maskLabel];
 
     return self;
 }
@@ -2048,6 +2057,19 @@ static UIView *LGClockOverlayContainerForHost(UIView *host) {
 
     self.maskLabel.frame = textFrame;
     [self lg_applyMaskLabel];
+
+    // 磨砂效果：根据偏好设置显示/隐藏磨砂背景
+    BOOL frostEnabled = [[LGGlassPreferenceValue(@"Clock.Frost.Enabled") boolValue] boolValue];
+    CGFloat blurValue = [[LGGlassPreferenceValue(@"Clock.Blur") floatValue] floatValue];
+    if (self.frostView) {
+        self.frostView.hidden = !frostEnabled;
+        if (frostEnabled) {
+            // 根据模糊值调整磨砂效果的透明度（0-50 映射到 0.3-1.0）
+            CGFloat alpha = 0.3 + (blurValue / 50.0) * 0.7;
+            self.frostView.alpha = alpha;
+            self.frostView.frame = self.bounds;
+        }
+    }
 
     // 恢复 mask 图像生成（让时间显示），但保持 0.5 秒节流（减少 CPU 占用）
     if ([self lg_maskNeedsRebuildForBounds:self.bounds]) {
