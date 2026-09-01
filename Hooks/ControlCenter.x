@@ -66,7 +66,16 @@ static CGFloat ccGlassRadiusForMaterial(UIView *mat) {
     if (w < 30.0 || h < 30.0) return -1.0;
 
     if (ccIsInsideSlider(mat)) {
-        if (isExactClass(mat.superview, @"MRUContinuousSliderView")) return ccPillRadius(mat);
+        // 匹配 MRUContinuousSliderView 和 CCUIContinuousSliderView 的滑块
+        if (isExactClass(mat.superview, @"MRUContinuousSliderView") ||
+            isExactClass(mat.superview, @"CCUIContinuousSliderView")) {
+            return ccPillRadius(mat);
+        }
+        // 滑块内部的其他 MTMaterialView 也匹配（如滑块轨道背景）
+        if (hasAncestorOfClassName(mat, @"CCUIContinuousSliderView") ||
+            hasAncestorOfClassName(mat, @"MRUContinuousSliderView")) {
+            return ccPillRadius(mat);
+        }
         return -1.0;
     }
 
