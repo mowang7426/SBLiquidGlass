@@ -19,8 +19,6 @@
 #pragma mark - 全局变量
 
 static void *kDIGlassKey = &kDIGlassKey;
-static IMP sOriginalSetBackgroundColor = NULL;
-static BOOL sSwizzled = NO;
 
 #pragma mark - 检查视图是否在灵动岛层级中
 
@@ -41,67 +39,66 @@ static BOOL diIsInDynamicIslandHierarchy(UIView *view) {
     return NO;
 }
 
-#pragma mark - Swizzle 后的 setBackgroundColor:
+#pragma mark - 超级彻底的背景清除（递归）
 
-static void diSetBackgroundColor(id self, SEL _cmd, UIColor *color) {
+static void diUltimateClearBackground(UIView *view) {
     @try {
-        // 调用原始实现
-        if (sOriginalSetBackgroundColor) {
-            ((void (*)(id, SEL, UIColor *))sOriginalSetBackgroundColor)(self, _cmd, color);
+        if (!view) return;
+        
+        // 1. 清除 backgroundColor
+        view.backgroundColor = [UIColor clearColor];
+        
+        // 2. 清除 layer.backgroundColor
+        view.layer.backgroundColor = [UIColor clearColor].CGColor;
+        
+        // 3. 清除 layer.contents（如果是黑色图片）
+        if (view.layer.contents) {
+            // 检查 contents 是否是图片
+            if ([view.layer.contents isKindOfClass:[UIImage class]] ||
+                CFGetTypeID((__bridge CFTypeRef)view.layer.contents) == CGImageGetTypeID()) {
+                view.layer.contents = nil;
+            }
         }
         
-        // 如果视图在灵动岛层级中，并且设置的是黑色或深色背景，改成透明
-        if (color && [self isKindOfClass:[UIView class]]) {
-            UIView *view = (UIView *)self;
-            if (diIsInDynamicIslandHierarchy(view)) {
-                CGFloat white = 0, alpha = 0;
-                if ([color respondsToSelector:@selector(getWhite:alpha:)]) {
-                    [color getWhite:&white alpha:&alpha];
-                    if (white < 0.2 && alpha > 0.1) {
-                        // 延迟改成透明，避免递归
-                        dispatch_async(dispatch_get_main_queue(), ^{
-                            @try {
-                                view.backgroundColor = [UIColor clearColor];
-                            } @catch (__unused NSException *e) {}
-                        });
+        // 4. 如果是 UIVisualEffectView，清除 effect
+        if ([view isKindOfClass:NSClassFromString(@"UIVisualEffectView")]) {
+            UIVisualEffectView *ev = (UIVisualEffectView *)view;
+            ev.effect = nil;
+        }
+        
+        // 5. 尝试查找并隐藏背景视图（通过属性名）
+        unsigned int count = 0;
+        Ivar *ivars = class_copyIvarList([view class], &count);
+        for (unsigned int i = 0; i < count; i++) {
+            Ivar ivar = ivars[i];
+            const char *name = ivar_getName(ivar);
+            if (name) {
+                NSString *ivarName = [NSString stringWithUTF8String:name];
+                // 查找背景相关的属性
+                if ([ivarName.lowercaseString containsString:@"bgview"] ||
+                    [ivarName.lowercaseString containsString:@"backgroundview"] ||
+                    [ivarName.lowercaseString containsString:@"backdrop"] ||
+                    [ivarName.lowercaseString containsString:@"blackview"]) {
+                    id bgView = object_getIvar(view, ivar);
+                    if (bgView && [bgView isKindOfClass:[UIView class]]) {
+                        UIView *bg = (UIView *)bgView;
+                        bg.hidden = YES;
+                        bg.alpha = 0.0;
+                        bg.backgroundColor = [UIColor clearColor];
+                        NSLog(@"[SBLiquidGlass-DI] Hid background ivar: %@", ivarName);
                     }
                 }
             }
         }
-    } @catch (__unused NSException *e) {}
-}
-
-#pragma mark - 执行 Swizzle
-
-static void diSwizzleSetBackgroundColor(void) {
-    @try {
-        if (sSwizzled) return;
-        sSwizzled = YES;
+        if (ivars) free(ivars);
         
-        Class uiViewClass = [UIView class];
-        SEL selector = @selector(setBackgroundColor:);
-        Method method = class_getInstanceMethod(uiViewClass, selector);
-        if (method) {
-            sOriginalSetBackgroundColor = method_getImplementation(method);
-            method_setImplementation(method, (IMP)diSetBackgroundColor);
-            NSLog(@"[SBLiquidGlass-DI] Swizzled setBackgroundColor:");
+        // 6. 递归清除子视图
+        for (UIView *subview in view.subviews) {
+            diUltimateClearBackground(subview);
         }
     } @catch (__unused NSException *e) {
-        NSLog(@"[SBLiquidGlass-DI] Swizzle exception: %@", e);
+        NSLog(@"[SBLiquidGlass-DI] Clear exception: %@", e);
     }
-}
-
-#pragma mark - 递归清除背景
-
-static void diClearBackgroundRecursive(UIView *view) {
-    @try {
-        if (!view) return;
-        view.backgroundColor = [UIColor clearColor];
-        view.layer.backgroundColor = [UIColor clearColor].CGColor;
-        for (UIView *subview in view.subviews) {
-            diClearBackgroundRecursive(subview);
-        }
-    } @catch (__unused NSException *e) {}
 }
 
 #pragma mark - 液态玻璃效果实现
@@ -113,16 +110,17 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
         
         NSLog(@"[SBLiquidGlass-DI] Applying to %@ (nice=%d)", NSStringFromClass(view.class), isNiceIsland);
         
-        // 如果是 nice 灵动岛，进行强力背景清除
+        // 如果是 nice 灵动岛，进行超级彻底的背景清除
         if (isNiceIsland) {
-            diClearBackgroundRecursive(view);
-            // 延迟持续清除
-            for (NSNumber *delay in @[@0.1, @0.3, @0.5, @1.0, @2.0, @3.0]) {
+            diUltimateClearBackground(view);
+            // 延迟持续清除（背景可能在后面才设置）
+            for (NSNumber *delay in @[@0.1, @0.3, @0.5, @1.0, @2.0, @3.0, @5.0]) {
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay.doubleValue * NSEC_PER_SEC)),
                                dispatch_get_main_queue(), ^{
-                    @try { diClearBackgroundRecursive(view); } @catch (__unused NSException *e) {}
+                    @try { diUltimateClearBackground(view); } @catch (__unused NSException *e) {}
                 });
             }
+            NSLog(@"[SBLiquidGlass-DI] Ultimate background clear done");
         }
         
         // 检查是否已经应用了液态玻璃
@@ -259,7 +257,6 @@ static void diRemoveGlass(UIView *view) {
 
 %ctor {
     @try {
-        diSwizzleSetBackgroundColor();
-        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (runtime swizzle version)");
+        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (ultimate clear version)");
     } @catch (__unused NSException *e) {}
 }
