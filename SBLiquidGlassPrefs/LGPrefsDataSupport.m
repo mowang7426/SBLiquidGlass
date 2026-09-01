@@ -689,11 +689,19 @@ NSArray<NSDictionary *> *LGLockscreenItems(void) {
         @[
             LGSectionSetting(LGLocalized(@"prefs.section.lockscreen_quick_actions.title"), nil),
         ],
-        LGRendererItemsForHostPrefix(@"QuickActions"),
+        @[
+            LGSwitchSetting(@"QuickActions.Enabled",
+                            LGLocalized(@"prefs.lockscreen.quick_actions.title"),
+                            LGLocalized(@"prefs.lockscreen.quick_actions.subtitle"), YES),
+        ],
         @[
             LGSectionSetting(LGLocalized(@"prefs.section.lockscreen_passcode.title"), nil),
         ],
-        LGRendererItemsForHostPrefix(@"Passcode"),
+        @[
+            LGSwitchSetting(@"Passcode.Enabled",
+                            LGLocalized(@"prefs.lockscreen.passcode.title"),
+                            LGLocalized(@"prefs.lockscreen.passcode.subtitle"), YES),
+        ],
         @[
             LGSectionSetting(LGLocalized(@"prefs.section.lockscreen_clock.title"), nil),
         ],
