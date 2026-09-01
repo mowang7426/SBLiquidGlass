@@ -947,6 +947,9 @@ NSArray<NSDictionary *> *LGOverviewToggleItems(void) {
         LGSwitchSetting(@"AppLibrary.Enabled",
                         @"资源库",
                         @"资源库液态玻璃效果", NO),
+        LGSwitchSetting(@"DynamicIsland.Enabled",
+                        @"灵动岛",
+                        @"灵动岛液态玻璃效果", NO),
     ];
 }
 
