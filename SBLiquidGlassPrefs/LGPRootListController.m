@@ -969,9 +969,8 @@ static NSString * const kLGRuntimeCacheUsageBytesKey = @"__runtime_cache_usage_b
 - (void)buildSettingsPage {
     [self installPage:&_lg_settingsScroll stack:&_lg_settingsStack];
 
-    // 详情设置：玻璃参数 + 锁屏时间详细设置
-    [_lg_settingsStack addArrangedSubview:[self lgSectionViewWithTitle:@"详情设置" subtitle:@"玻璃参数与锁屏时间详细设置"]];
-    [_lg_settingsStack addArrangedSubview:[self lgGroupedCardForItems:LGGlobalGlassTuningItems()]];
+    // 详情设置：锁屏时间详细设置（玻璃参数已在玻璃效果Tab页面中）
+    [_lg_settingsStack addArrangedSubview:[self lgSectionViewWithTitle:@"详情设置" subtitle:@"锁屏时间详细设置"]];
     [_lg_settingsStack addArrangedSubview:[self lgGroupedCardForItems:LGClockItems()]];
 
     [_lg_settingsStack addArrangedSubview:[self lgSectionViewWithTitle:LGLocalized(@"prefs.settings.appearance.title") subtitle:nil]];
