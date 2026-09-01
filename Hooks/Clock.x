@@ -2066,6 +2066,15 @@ static UIView *LGClockOverlayContainerForHost(UIView *host) {
 - (void)layoutSubviews {
     [super layoutSubviews];
     self.glassView.frame = self.bounds;
+    // 优化：只有当 bounds 真正变化时才更新 mask，减少不必要的耗时操作
+    NSValue *lastLayoutBounds = objc_getAssociatedObject(self, @selector(lgClockLastLayoutBounds));
+    if (lastLayoutBounds) {
+        CGRect lastBounds = [lastLayoutBounds CGRectValue];
+        if (CGRectEqualToRect(lastBounds, self.bounds)) {
+            return; // bounds 没变化，跳过 mask 更新
+        }
+    }
+    objc_setAssociatedObject(self, @selector(lgClockLastLayoutBounds), [NSValue valueWithCGRect:self.bounds], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [self lg_updateMask];
 }
 
