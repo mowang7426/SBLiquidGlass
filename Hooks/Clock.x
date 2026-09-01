@@ -123,7 +123,8 @@ static void LGStartClockDisplayLinkDriver(LGClockDisplayLink *state, void (^tick
     CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:target selector:@selector(fire)];
 
     if (@available(iOS 15.0, *))
-        displayLink.preferredFrameRateRange = CAFrameRateRangeMake(60.0, 120.0, 120.0);
+        // 优化：降低帧率，从 60-120Hz 改成 30Hz，减少 CPU 占用
+        displayLink.preferredFrameRateRange = CAFrameRateRangeMake(20.0, 30.0, 30.0);
     [displayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
     state->link = displayLink;
 }
