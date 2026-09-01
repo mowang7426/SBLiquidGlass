@@ -66,7 +66,12 @@ static CGFloat ccGlassRadiusForMaterial(UIView *mat) {
         !ccHasSBElasticHierarchy(mat)) return -1.0;
 
     CGFloat w = CGRectGetWidth(mat.bounds), h = CGRectGetHeight(mat.bounds);
-    if (w < 30.0 || h < 30.0) return -1.0;
+    // 音量HUD的 MTMaterialView 可能尺寸较小，放宽检查
+    if (ccHasSBElasticHierarchy(mat)) {
+        if (w < 10.0 || h < 10.0) return -1.0;
+    } else {
+        if (w < 30.0 || h < 30.0) return -1.0;
+    }
 
     if (ccIsInsideSlider(mat)) {
         // 匹配 MRUContinuousSliderView 和 CCUIContinuousSliderView 的滑块
@@ -590,7 +595,7 @@ static void ccRestoreAllRoundedViews(void) {
 
 static void lgRound(UIView *v, CGFloat r) {
     if (!v) return;
-    if (!lgHostEnabled(@"ControlCenter") || ccHasSBElasticHierarchy(v)) {
+    if (!lgHostEnabled(@"ControlCenter")) {
         ccRestoreRoundState(v);
         return;
     }
@@ -606,7 +611,7 @@ static void lgRound(UIView *v, CGFloat r) {
 }
 
 static void ccApplyOrRestoreRound(UIView *view, CGFloat radius, BOOL eligible) {
-    if (!eligible || !lgHostEnabled(@"ControlCenter") || ccHasSBElasticHierarchy(view)) {
+    if (!eligible || !lgHostEnabled(@"ControlCenter")) {
         ccRestoreRoundState(view);
         return;
     }
