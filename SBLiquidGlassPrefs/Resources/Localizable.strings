@@ -307,3 +307,6 @@
 
 "prefs.overview.toggle.settings_controls" = "设置控件";
 "prefs.overview.toggle.settings_controls.subtitle" = "设置界面开关和滑条的液态玻璃效果。";
+
+"prefs.notification.background_alpha.title" = "透明度";
+"prefs.notification.background_alpha.subtitle" = "调整通知中心背景的透明度。";
