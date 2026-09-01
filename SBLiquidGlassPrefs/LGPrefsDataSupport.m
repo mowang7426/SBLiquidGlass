@@ -627,38 +627,6 @@ NSArray<NSDictionary *> *LGControlCenterItems(void) {
     ]);
 }
 
-static NSArray<NSDictionary *> *LGClockVariableFontItems(void) {
-
-    NSMutableDictionary *variableFontEnabled = [LGSwitchSetting(@"Clock.VariableFont.Enabled",
-                                                                  LGLocalized(@"prefs.control.variable_font"),
-                                                                  LGLocalized(@"prefs.subtitle.variable_font"),
-                                                                  YES) mutableCopy];
-    variableFontEnabled[@"controls_following_panel"] = @YES;
-    return @[
-        LGSpacerSetting(8.0, 0.0),
-        variableFontEnabled.copy,
-        LGSettingControlledByKey(LGSliderSetting(@"Clock.VariableFont.Weight",
-                                                  LGLocalized(@"prefs.control.variable_font_weight"),
-                                                  LGLocalized(@"prefs.subtitle.variable_font_weight"),
-                                                  750.0, 1.0, 1000.0, 0), @"Clock.VariableFont.Enabled", @YES),
-        LGSettingControlledByKey(LGSliderSetting(@"Clock.VariableFont.SizeScale",
-                                                  LGLocalized(@"prefs.control.variable_font_size"),
-                                                  LGLocalized(@"prefs.subtitle.variable_font_size"),
-                                                  1.4, 0.8, 2.0, 2), @"Clock.VariableFont.Enabled", @YES),
-        LGSettingControlledByKey(LGSliderSetting(@"Clock.VariableFont.Width",
-                                                  LGLocalized(@"prefs.control.variable_font_width"),
-                                                  LGLocalized(@"prefs.subtitle.variable_font_width"),
-                                                  100.0, 60.0, 100.0, 0), @"Clock.VariableFont.Enabled", @YES),
-        LGSettingControlledByKey(LGSliderSetting(@"Clock.VariableFont.Height",
-                                                  LGLocalized(@"prefs.control.variable_font_height"),
-                                                  LGLocalized(@"prefs.subtitle.variable_font_height"),
-                                                  350.0, 100.0, 500.0, 0), @"Clock.VariableFont.Enabled", @YES),
-        LGSettingControlledByKey(LGSliderSetting(@"Clock.VariableFont.Softness",
-                                                  LGLocalized(@"prefs.control.variable_font_softness"),
-                                                  LGLocalized(@"prefs.subtitle.variable_font_softness"),
-                                                  56.0, 0.0, 100.0, 0), @"Clock.VariableFont.Enabled", @YES),
-    ];
-}
 
 NSArray<NSDictionary *> *LGClockItems(void) {
     return @[
