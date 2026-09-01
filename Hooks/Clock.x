@@ -1853,6 +1853,7 @@ static UIView *LGClockOverlayContainerForHost(UIView *host) {
     _glassView = [[LGClockBackdropView alloc] initWithFrame:self.bounds];
     _glassView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     _glassView.cornerRadius = 0.0;
+    _glassView.hidden = YES; // 测试：临时禁用液态玻璃视图，只保留字体替换
     [self addSubview:_glassView];
 
     _maskLabel = [[UILabel alloc] initWithFrame:self.bounds];
