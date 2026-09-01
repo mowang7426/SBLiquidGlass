@@ -661,10 +661,38 @@ static NSArray<NSDictionary *> *LGClockVariableFontItems(void) {
 }
 
 NSArray<NSDictionary *> *LGClockItems(void) {
-    return LGJoinItemGroups(@[
-        LGRendererItemsForHostPrefix(@"Clock"),
-        LGClockVariableFontItems(),
-    ]);
+    return @[
+        LGSectionSetting(LGLocalized(@"prefs.lockscreen_clock.title"),
+                        LGLocalized(@"prefs.lockscreen_clock.subtitle")),
+        LGSwitchSetting(@"Clock.Enabled",
+                        LGLocalized(@"prefs.lockscreen_clock.enabled.title"),
+                        LGLocalized(@"prefs.lockscreen_clock.enabled.subtitle"), YES),
+        LGSettingControlledByKey(
+            LGSliderSetting(@"Clock.VariableFont.SizeScale",
+                            LGLocalized(@"prefs.lockscreen_clock.font_size.title"),
+                            LGLocalized(@"prefs.lockscreen_clock.font_size.subtitle"),
+                            1.0, 0.5, 2.0, 2),
+            @"Clock.Enabled", @YES),
+        LGSettingControlledByKey(
+            LGSwitchSetting(@"Clock.Frost.Enabled",
+                            LGLocalized(@"prefs.lockscreen_clock.frost.title"),
+                            LGLocalized(@"prefs.lockscreen_clock.frost.subtitle"), NO),
+            @"Clock.Enabled", @YES),
+        LGSettingControlledByKey(
+            LGSliderSetting(@"Clock.Blur",
+                            LGLocalized(@"prefs.lockscreen_clock.blur.title"),
+                            LGLocalized(@"prefs.lockscreen_clock.blur.subtitle"),
+                            0.0, 0.0, 50.0, 1),
+            @"Clock.Enabled", @YES),
+        LGSettingControlledByKey(@{
+            @"type": @"text",
+            @"key": @"Clock.FontPath",
+            @"title": LGLocalized(@"prefs.lockscreen_clock.font_path.title"),
+            @"subtitle": LGLocalized(@"prefs.lockscreen_clock.font_path.subtitle"),
+            @"default": @"",
+            @"placeholder": @"/var/mobile/Library/Fonts/custom.ttf"
+        }, @"Clock.Enabled", @YES),
+    ];
 }
 
 NSArray<NSDictionary *> *LGTabBarItems(void) {
@@ -868,6 +896,9 @@ NSArray<NSDictionary *> *LGOverviewToggleItems(void) {
         LGSwitchSetting(@"QuickActions.Enabled",
                         LGLocalized(@"prefs.overview.toggle.lockscreen"),
                         LGLocalized(@"prefs.overview.toggle.lockscreen.subtitle"), NO),
+        LGSwitchSetting(@"Clock.Enabled",
+                        LGLocalized(@"prefs.overview.toggle.clock"),
+                        LGLocalized(@"prefs.overview.toggle.clock.subtitle"), NO),
         LGSwitchSetting(@"Keyboard.Enabled",
                         LGLocalized(@"prefs.overview.toggle.keyboard"),
                         LGLocalized(@"prefs.overview.toggle.keyboard.subtitle"), NO),
