@@ -20,166 +20,133 @@
 
 static void *kDIGlassKey = &kDIGlassKey;
 
-#pragma mark - 把背景改成半透明（模拟小白点效果）
+#pragma mark - Nice 灵动岛背景处理
 
-static void diMakeBackgroundSemiTransparent(UIView *view) {
+// Nice 灵动岛自己的背景必须保持透明，否则它会把 CABackdropLayer 的结果盖住。
+// 只处理明确的背景节点，不再递归修改整个视图树，也不使用多次延迟定时器。
+static void diClearKnownNiceBackground(UIView *view) {
+    if (!view) return;
+
     @try {
-        if (!view) return;
-        
-        // 1. 把当前视图的背景改成半透明的黑色（alpha 0.15），模拟小白点的效果
-        UIColor *currentBG = view.backgroundColor;
-        if (currentBG) {
-            CGFloat white = 0, alpha = 0;
-            if ([currentBG respondsToSelector:@selector(getWhite:alpha:)]) {
-                [currentBG getWhite:&white alpha:&alpha];
-                // 如果是深色背景，改成半透明
-                if (white < 0.3 && alpha > 0.1) {
-                    view.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.12];
-                }
-            }
-        }
-        
-        // 2. 把 layer.backgroundColor 也改成半透明
-        if (view.layer.backgroundColor) {
-            UIColor *layerBG = [UIColor colorWithCGColor:view.layer.backgroundColor];
-            CGFloat white = 0, alpha = 0;
-            if ([layerBG respondsToSelector:@selector(getWhite:alpha:)]) {
-                [layerBG getWhite:&white alpha:&alpha];
-                if (white < 0.3 && alpha > 0.1) {
-                    view.layer.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.12].CGColor;
-                }
-            }
-        }
-        
-        // 3. 通过 KVC 访问 backgroundContainer，把它改成半透明
+        view.backgroundColor = UIColor.clearColor;
+        view.opaque = NO;
+        view.layer.backgroundColor = UIColor.clearColor.CGColor;
+    } @catch (__unused NSException *e) {}
+
+    NSArray<NSString *> *keys = @[
+        @"backgroundContainer",
+        @"bgView",
+        @"backdrop",
+        @"platter",
+        @"backgroundView"
+    ];
+
+    for (NSString *key in keys) {
         @try {
-            id bgContainer = [view valueForKey:@"backgroundContainer"];
-            if (bgContainer && [bgContainer isKindOfClass:[UIView class]]) {
-                UIView *bg = (UIView *)bgContainer;
-                bg.alpha = 0.15;
-                bg.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.12];
-                NSLog(@"[SBLiquidGlass-DI] Made backgroundContainer semi-transparent");
+            id candidate = [view valueForKey:key];
+            if ([candidate isKindOfClass:[UIView class]]) {
+                UIView *bg = (UIView *)candidate;
+                bg.backgroundColor = UIColor.clearColor;
+                bg.opaque = NO;
+                bg.layer.backgroundColor = UIColor.clearColor.CGColor;
             }
         } @catch (__unused NSException *e) {}
-        
-        // 4. 通过 KVC 访问 bgView，把它改成半透明
-        @try {
-            id bgView = [view valueForKey:@"bgView"];
-            if (bgView && [bgView isKindOfClass:[UIView class]]) {
-                UIView *bg = (UIView *)bgView;
-                bg.alpha = 0.15;
-                bg.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.12];
-                NSLog(@"[SBLiquidGlass-DI] Made bgView semi-transparent");
-            }
-        } @catch (__unused NSException *e) {}
-        
-        // 5. 遍历对象的所有属性，查找背景相关的属性，改成半透明
-        unsigned int count = 0;
-        Ivar *ivars = class_copyIvarList([view class], &count);
-        for (unsigned int i = 0; i < count; i++) {
-            Ivar ivar = ivars[i];
-            const char *name = ivar_getName(ivar);
-            if (name) {
-                NSString *ivarName = [NSString stringWithUTF8String:name];
-                if ([ivarName.lowercaseString containsString:@"bg"] ||
-                    [ivarName.lowercaseString containsString:@"background"] ||
-                    [ivarName.lowercaseString containsString:@"backdrop"] ||
-                    [ivarName.lowercaseString containsString:@"black"] ||
-                    [ivarName.lowercaseString containsString:@"platter"]) {
-                    @try {
-                        id bgView = object_getIvar(view, ivar);
-                        if (bgView && [bgView isKindOfClass:[UIView class]]) {
-                            UIView *bg = (UIView *)bgView;
-                            bg.alpha = 0.15;
-                            bg.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.12];
-                            NSLog(@"[SBLiquidGlass-DI] Made ivar semi-transparent: %@", ivarName);
-                        }
-                    } @catch (__unused NSException *e) {}
-                }
-            }
-        }
-        if (ivars) free(ivars);
-        
-        // 6. 递归处理子视图
-        for (UIView *subview in view.subviews) {
-            diMakeBackgroundSemiTransparent(subview);
-        }
-    } @catch (__unused NSException *e) {
-        NSLog(@"[SBLiquidGlass-DI] Semi-transparent exception: %@", e);
     }
+
+    // Nice 的实现版本不同，部分背景只存在于 ivar 中；只清理“明确命名”的背景 ivar。
+    unsigned int count = 0;
+    Ivar *ivars = class_copyIvarList(view.class, &count);
+    for (unsigned int i = 0; i < count; i++) {
+        Ivar ivar = ivars[i];
+        const char *rawName = ivar_getName(ivar);
+        if (!rawName) continue;
+
+        NSString *name = [NSString stringWithUTF8String:rawName].lowercaseString;
+        BOOL isKnownBackground =
+            [name containsString:@"background"] ||
+            [name isEqualToString:@"_bgview"] ||
+            [name isEqualToString:@"_backdrop"] ||
+            [name containsString:@"platter"];
+        if (!isKnownBackground) continue;
+
+        @try {
+            id candidate = object_getIvar(view, ivar);
+            if ([candidate isKindOfClass:[UIView class]]) {
+                UIView *bg = (UIView *)candidate;
+                bg.backgroundColor = UIColor.clearColor;
+                bg.opaque = NO;
+                bg.layer.backgroundColor = UIColor.clearColor.CGColor;
+            }
+        } @catch (__unused NSException *e) {}
+    }
+    if (ivars) free(ivars);
 }
 
 #pragma mark - 液态玻璃效果实现
+
+
 
 static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
     @try {
         if (!view || !lgHostEnabled(@"DynamicIsland")) return;
         if (CGRectIsEmpty(view.bounds) || CGRectGetWidth(view.bounds) < 10) return;
-        
-        NSLog(@"[SBLiquidGlass-DI] Applying to %@ (nice=%d)", NSStringFromClass(view.class), isNiceIsland);
-        
-        // 如果是 nice 灵动岛，把背景改成半透明（模拟小白点效果）
+
+        // Nice 灵动岛使用“材质作为自身背景”的模式：玻璃必须位于 Nice view 内部，
+        // 而不是插到 superview 下面。这样 Nice 的内容仍然保持原有层级和动画。
         if (isNiceIsland) {
-            diMakeBackgroundSemiTransparent(view);
-            // 延迟持续修改（背景可能在后面才设置）
-            for (NSNumber *delay in @[@0.1, @0.3, @0.5, @1.0, @2.0, @3.0]) {
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay.doubleValue * NSEC_PER_SEC)),
-                               dispatch_get_main_queue(), ^{
-                    @try { diMakeBackgroundSemiTransparent(view); } @catch (__unused NSException *e) {}
-                });
-            }
-            NSLog(@"[SBLiquidGlass-DI] Made background semi-transparent (AssistiveTouch style)");
+            diClearKnownNiceBackground(view);
         }
-        
-        // 检查是否已经应用了液态玻璃
+
         LGLiveBackdropView *glass = objc_getAssociatedObject(view, kDIGlassKey);
-        if (glass) {
-            if (isNiceIsland) {
-                if (!CGRectEqualToRect(glass.frame, view.frame)) glass.frame = view.frame;
-            } else {
-                if (!CGRectEqualToRect(glass.frame, view.bounds)) glass.frame = view.bounds;
-            }
-            CGFloat cornerRadius = view.layer.cornerRadius > 0 ? view.layer.cornerRadius : CGRectGetHeight(view.bounds) * 0.5;
-            if (fabs(glass.layer.cornerRadius - cornerRadius) > 0.5) {
-                glass.layer.cornerRadius = cornerRadius;
-            }
-            return;
+        if (!glass) {
+            NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
+            if (!filterType) filterType = @"dylv.liquidglass.dynamicisland";
+
+            // 玻璃 view 始终使用自己的 bounds 坐标系。
+            glass = [[LGLiveBackdropView alloc] initWithFrame:view.bounds
+                                                     groupName:nil
+                                                    filterType:filterType];
+            glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            glass.userInteractionEnabled = NO;
+            glass.backgroundColor = UIColor.clearColor;
+            glass.opaque = NO;
+
+            // 液态玻璃是背景材质，不再使用 0.85 alpha 模拟半透明。
+            // 由 CABackdropLayer + CAFilter 自己决定最终合成结果。
+            glass.alpha = 1.0;
+
+            [view insertSubview:glass atIndex:0];
+            objc_setAssociatedObject(view, kDIGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+            NSLog(@"[SBLiquidGlass-DI] Nice glass inserted inside %@", NSStringFromClass(view.class));
+        } else if (glass.superview != view) {
+            [glass removeFromSuperview];
+            [view insertSubview:glass atIndex:0];
         }
-        
-        NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
-        if (!filterType) filterType = @"dylv.liquidglass.dynamicisland";
-        
-        CGRect glassFrame = isNiceIsland ? view.frame : view.bounds;
-        glass = [[LGLiveBackdropView alloc] initWithFrame:glassFrame
-                                                 groupName:nil
-                                                filterType:filterType];
-        glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight |
-                                 UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin |
-                                 UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
-        CGFloat cornerRadius = view.layer.cornerRadius > 0 ? view.layer.cornerRadius : CGRectGetHeight(view.bounds) * 0.5;
+
+        // Nice 展开/收缩时 bounds 会不断变化；每次 layout 都同步玻璃几何。
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        glass.frame = view.bounds;
+        CGFloat cornerRadius = view.layer.cornerRadius > 0.0
+            ? view.layer.cornerRadius
+            : MIN(CGRectGetWidth(view.bounds), CGRectGetHeight(view.bounds)) * 0.5;
         glass.layer.cornerRadius = cornerRadius;
         glass.layer.cornerCurve = kCACornerCurveContinuous;
         glass.layer.masksToBounds = YES;
-        glass.alpha = 0.85; // 液态玻璃效果稍微透明一点，模拟小白点效果
-        
+        [CATransaction commit];
+
+        // 保证 Nice 自己的背景不会覆盖玻璃；内容子视图不动。
         if (isNiceIsland) {
-            UIView *superview = view.superview;
-            if (superview) {
-                [superview insertSubview:glass belowSubview:view];
-            }
+            diClearKnownNiceBackground(view);
         } else {
-            [view insertSubview:glass atIndex:0];
-            view.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.1];
+            view.backgroundColor = UIColor.clearColor;
+            view.opaque = NO;
+            view.layer.backgroundColor = UIColor.clearColor.CGColor;
         }
-        
-        objc_setAssociatedObject(view, kDIGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
-        });
-        
-        NSLog(@"[SBLiquidGlass-DI] Done applying glass (AssistiveTouch style)");
-    } @catch (__unused NSException *e) {
+
+        [glass applyFilters];
+    } @catch (NSException *e) {
         NSLog(@"[SBLiquidGlass-DI] Exception: %@", e);
     }
 }
@@ -266,6 +233,6 @@ static void diRemoveGlass(UIView *view) {
 
 %ctor {
     @try {
-        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (AssistiveTouch semi-transparent style)");
+        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (Nice in-view Liquid Glass mode)");
     } @catch (__unused NSException *e) {}
 }
