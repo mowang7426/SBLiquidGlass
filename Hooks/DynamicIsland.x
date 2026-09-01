@@ -4,6 +4,7 @@
 #import "../Shared/LGGlassKit.h"
 #import "../Shared/LGSharedSupport.h"
 #import <objc/runtime.h>
+#import <objc/message.h>
 
 #pragma mark - 私有类声明
 
@@ -229,6 +230,70 @@ static void diPutNiceGlassBetweenBackgroundAndContent(UIView *container,
     } @catch (__unused NSException *e) {}
 }
 
+
+#pragma mark - Mango glass bridge
+
+// Test10: Mango 已经在 SpringBoard 中提供 MGLiveBackdropView。
+// 不直接链接 Mango，避免让本插件产生硬依赖；运行时存在就使用 Mango，
+// 不存在则回退到本项目自己的 LGLiveBackdropView。
+static UIView *diCreateMangoGlass(CGRect frame) {
+    Class cls = NSClassFromString(@"MGLiveBackdropView");
+    if (!cls || ![cls isSubclassOfClass:[UIView class]]) return nil;
+
+    @try {
+        // Mango 的实际二进制暴露了：
+        // - initWithFrame:groupName:filterType:
+        // - applyFilters
+        // - refresh
+        // 这里使用正确的 ABI 签名调用，避免 performSelector/私有参数猜测。
+        id (*InitFn)(id, SEL, CGRect, id, id) =
+            (id (*)(id, SEL, CGRect, id, id))objc_msgSend;
+        UIView *v = InitFn([cls alloc],
+                           @selector(initWithFrame:groupName:filterType:),
+                           frame, nil, nil);
+        if (!v) return nil;
+
+        v.backgroundColor = UIColor.clearColor;
+        v.opaque = NO;
+        v.userInteractionEnabled = NO;
+        return v;
+    } @catch (__unused NSException *e) {
+        return nil;
+    }
+}
+
+static void diRefreshMangoGlass(UIView *glass) {
+    if (!glass || ![NSStringFromClass(glass.class) isEqualToString:@"MGLiveBackdropView"]) return;
+    @try {
+        if ([glass respondsToSelector:@selector(applyFilters)]) {
+            void (*ApplyFn)(id, SEL) = (void (*)(id, SEL))objc_msgSend;
+            ApplyFn(glass, @selector(applyFilters));
+        }
+        if ([glass respondsToSelector:@selector(refresh)]) {
+            void (*RefreshFn)(id, SEL) = (void (*)(id, SEL))objc_msgSend;
+            RefreshFn(glass, @selector(refresh));
+        }
+    } @catch (__unused NSException *e) {}
+}
+
+static void diConfigureGlassView(UIView *glass, UIView *host) {
+    if (!glass || !host) return;
+    glass.frame = host.bounds;
+    glass.autoresizingMask = UIViewAutoresizingFlexibleWidth |
+                             UIViewAutoresizingFlexibleHeight;
+    glass.backgroundColor = UIColor.clearColor;
+    glass.opaque = NO;
+    glass.userInteractionEnabled = NO;
+
+    CGFloat radius = host.layer.cornerRadius;
+    if (radius <= 0.0) {
+        radius = MIN(CGRectGetWidth(host.bounds), CGRectGetHeight(host.bounds)) * 0.5;
+    }
+    glass.layer.cornerRadius = radius;
+    glass.layer.cornerCurve = kCACornerCurveContinuous;
+    glass.layer.masksToBounds = YES;
+}
+
 static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
     @try {
         if (!view || !lgHostEnabled(@"DynamicIsland")) return;
@@ -256,16 +321,23 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
             return;
         }
 
-        NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
-        if (!filterType.length)
-            filterType = @"dylv.liquidglass.dynamicisland";
-
-        // 关键：Nice 的玻璃必须属于 Nice 自己的坐标系。
+        // 优先使用 Mango 已经实现并注册的 MGLiveBackdropView。
+        // 只有 Mango 未加载时才回退到原有 LGLiveBackdropView。
         CGRect glassFrame = view.bounds;
-
-        glass = [[LGLiveBackdropView alloc] initWithFrame:glassFrame
-                                                 groupName:nil
-                                                filterType:filterType];
+        UIView *mangoGlass = diCreateMangoGlass(glassFrame);
+        if (mangoGlass) {
+            // 关联对象类型保持为 UIView*，这样不需要链接 Mango 私有类。
+            // 后续同步统一通过 UIView API 完成。
+            glass = (LGLiveBackdropView *)mangoGlass;
+            NSLog(@"[SBLiquidGlass-DI] Test10 using Mango MGLiveBackdropView");
+        } else {
+            NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
+            if (!filterType.length)
+                filterType = @"dylv.liquidglass.dynamicisland";
+            glass = [[LGLiveBackdropView alloc] initWithFrame:glassFrame
+                                                     groupName:nil
+                                                    filterType:filterType];
+        }
 
         glass.autoresizingMask = UIViewAutoresizingFlexibleWidth |
                                  UIViewAutoresizingFlexibleHeight;
@@ -309,7 +381,11 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
         // 立即应用，避免第一次显示时出现普通黑色背景闪烁。
-        @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
+        if ([glass isKindOfClass:NSClassFromString(@"MGLiveBackdropView")]) {
+            diRefreshMangoGlass(glass);
+        } else {
+            @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
+        }
 
         NSLog(@"[SBLiquidGlass-DI] Liquid Glass attached to %@ (nice=%d)",
               NSStringFromClass(view.class), isNiceIsland);
@@ -361,7 +437,11 @@ static void diApplyGlassToNiceCurrentContainer(UIView *container) {
             diPutNiceGlassBetweenBackgroundAndContent(container, glass);
             diClearLargeBackgroundLayers(container.layer, container, 0);
             diSyncNiceGlass(container, glass);
-            @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
+            if ([glass isKindOfClass:NSClassFromString(@"MGLiveBackdropView")]) {
+                diRefreshMangoGlass(glass);
+            } else {
+                @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
+            }
         }
 
         NSLog(@"[SBLiquidGlass-DI] Nice current container = %@ frame=%@",
