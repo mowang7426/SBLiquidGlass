@@ -318,16 +318,6 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
     }
 }
 
-static void diRemoveGlass(UIView *view) {
-    @try {
-        LGLiveBackdropView *glass = objc_getAssociatedObject(view, kDIGlassKey);
-        if (glass) {
-            [glass removeFromSuperview];
-            objc_setAssociatedObject(view, kDIGlassKey, nil, OBJC_ASSOCIATION_ASSIGN);
-        }
-    } @catch (__unused NSException *e) {}
-}
-
 #pragma mark - Nice 专用：不 Hook 系统 rendering configuration
 
 // 安全版：不修改 SBSystemApertureContainerView 的私有渲染配置，也不 Hook
