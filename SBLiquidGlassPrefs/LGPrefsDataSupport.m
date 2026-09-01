@@ -884,6 +884,9 @@ NSArray<NSDictionary *> *LGOverviewToggleItems(void) {
         LGSwitchSetting(@"Keyboard.Enabled",
                         LGLocalized(@"prefs.overview.toggle.keyboard"),
                         LGLocalized(@"prefs.overview.toggle.keyboard.subtitle"), NO),
+        LGSwitchSetting(@"SettingsControls.Enabled",
+                        LGLocalized(@"prefs.overview.toggle.settings_controls"),
+                        LGLocalized(@"prefs.overview.toggle.settings_controls.subtitle"), NO),
     ];
 }
 
