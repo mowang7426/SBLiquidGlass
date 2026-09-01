@@ -78,6 +78,66 @@ static void diClearNiceBackgroundTree(UIView *view, NSInteger depth) {
     } @catch (__unused NSException *e) {}
 }
 
+
+// Test6：Nice 的黑色填充很可能不是 backgroundColor，而是由 opaque/draw/layer
+// backing store 或自定义背景 view 绘制。只对“背景候选节点”关闭不透明绘制，
+// 不再依赖名字命中就直接隐藏整个 View。
+static BOOL diIsLikelyBackgroundView(UIView *v) {
+    if (!v) return NO;
+    NSString *n = NSStringFromClass(v.class).lowercaseString;
+    if (diNameLooksLikeBackground(n)) return YES;
+    NSString *label = v.accessibilityIdentifier.lowercaseString;
+    if (label.length && diNameLooksLikeBackground(label)) return YES;
+    return NO;
+}
+
+static void diNeutralizeNiceBackgroundView(UIView *v, NSInteger depth) {
+    if (!v || depth > 10) return;
+
+    @try {
+        BOOL candidate = diIsLikelyBackgroundView(v);
+
+        if (candidate) {
+            // 不隐藏 View：Nice 有些背景容器同时承担布局。
+            // 只让 UIKit/CoreAnimation 不再把它作为不透明黑色 backing。
+            v.opaque = NO;
+            v.clearsContextBeforeDrawing = NO;
+            v.backgroundColor = UIColor.clearColor;
+            v.layer.opaque = NO;
+            v.layer.backgroundColor = UIColor.clearColor.CGColor;
+
+            // 避免常见的遮罩/填充继续提供纯黑底。
+            v.layer.shadowOpacity = 0.0;
+
+            for (CALayer *l in [v.layer.sublayers copy]) {
+                NSString *ln = (l.name ?: @"").lowercaseString;
+                BOOL layerCandidate =
+                    [ln containsString:@"background"] ||
+                    [ln containsString:@"backdrop"] ||
+                    [ln containsString:@"material"] ||
+                    [ln containsString:@"platter"] ||
+                    [ln containsString:@"backview"];
+
+                if (layerCandidate || l.opaque) {
+                    l.opaque = NO;
+                    if (layerCandidate)
+                        l.backgroundColor = UIColor.clearColor.CGColor;
+
+                    if ([l isKindOfClass:[CAShapeLayer class]] && layerCandidate) {
+                        ((CAShapeLayer *)l).fillColor = UIColor.clearColor.CGColor;
+                    }
+                }
+            }
+
+            NSLog(@"[SBLiquidGlass-DI] Test6 neutralized background view %@", NSStringFromClass(v.class));
+        }
+
+        for (UIView *sub in [v.subviews copy]) {
+            diNeutralizeNiceBackgroundView(sub, depth + 1);
+        }
+    } @catch (__unused NSException *e) {}
+}
+
 static void diSyncNiceGlass(UIView *view, LGLiveBackdropView *glass) {
     if (!view || !glass) return;
 
@@ -183,6 +243,9 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
                 diClearLargeBackgroundLayers(view.layer, view, 0);
                 // 每次 Nice layout 后重新清理一次刚刚被 Nice 写回的背景。
                 diClearNiceBackgroundTree(view, 0);
+                diNeutralizeNiceBackgroundView(view, 0);
+                view.opaque = NO;
+                view.layer.opaque = NO;
             } else {
                 glass.frame = view.bounds;
                 CGFloat radius = view.layer.cornerRadius > 0 ?
@@ -220,6 +283,9 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
         // 不再用 alpha 0.85 叠加一层黑色；让 Backdrop 自己负责玻璃材质。
         glass.alpha = 1.0;
         glass.backgroundColor = [UIColor clearColor];
+        glass.opaque = NO;
+        glass.layer.opaque = NO;
+        glass.layer.backgroundColor = UIColor.clearColor.CGColor;
 
         if (isNiceIsland) {
             // 先清掉 Nice 真正的背景节点。
@@ -233,6 +299,12 @@ static void diApplyGlassToView(UIView *view, BOOL isNiceIsland) {
 
             // 清理容器层级中覆盖大面积的背景 CALayer / CAShapeLayer。
             diClearLargeBackgroundLayers(view.layer, view, 0);
+
+            // Test6：处理自定义绘制/opaque backing 造成的黑底。
+            diNeutralizeNiceBackgroundView(view, 0);
+            view.opaque = NO;
+            view.clearsContextBeforeDrawing = NO;
+            view.layer.opaque = NO;
 
             // 再清一次，防止 Nice 的 layout 在插入过程中重新创建背景。
             diClearNiceBackgroundTree(view, 0);
