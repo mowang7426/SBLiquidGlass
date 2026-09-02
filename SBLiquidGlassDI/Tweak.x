@@ -1,12 +1,12 @@
-// SBLiquidGlassDI - 灵动岛内容进程黑色背景清除（v2 带日志+更激进）
-// 在 MediaRemoteUI / chronod / ClockAngel / InCallService 等进程里
-// 清除灵动岛内容视图的黑色背景
+// SBLiquidGlassDI - 灵动岛内容进程黑色背景清除（通用版 v3）
+// 在所有进程里加载，然后判断进程名，只在灵动岛相关进程里执行
 
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 
 static NSString *kDILogPath = @"/var/mobile/Documents/sbliquidglassdi_log.txt";
+static BOOL gIsDIProcess = NO;
 
 #pragma mark - 日志工具
 
@@ -42,25 +42,20 @@ static BOOL diColorIsBlack(CGColorRef color) {
     CGFloat r=0,g=0,b=0,a=0;
     if (n >= 4) { r=c[0]; g=c[1]; b=c[2]; a=c[3]; }
     else if (n == 2) { r=g=b=c[0]; a=c[1]; }
-    // 更宽松：alpha > 0.05 且 RGB 都 < 0.25
     return a > 0.05 && r < 0.25 && g < 0.25 && b < 0.25;
 }
 
-// 递归清除视图及其所有子视图的黑色背景（最激进版）
 static void diClearBlackBackgroundsRecursive(UIView *view, NSInteger depth, NSInteger *count) {
     if (!view || depth > 40) return;
     @try {
-        // 清除视图背景色
         if (view.backgroundColor && diColorIsBlack(view.backgroundColor.CGColor)) {
             view.backgroundColor = UIColor.clearColor;
             if (count) (*count)++;
         }
-        // 清除 layer 背景色
         if (view.layer.backgroundColor && diColorIsBlack(view.layer.backgroundColor)) {
             view.layer.backgroundColor = UIColor.clearColor.CGColor;
             if (count) (*count)++;
         }
-        // 对普通 UIView，如果它是纯背景视图（没有子视图且没有内容），直接隐藏
         if (view.subviews.count == 0 && !view.layer.contents &&
             view.backgroundColor && diColorIsBlack(view.backgroundColor.CGColor)) {
             view.hidden = YES;
@@ -73,12 +68,10 @@ static void diClearBlackBackgroundsRecursive(UIView *view, NSInteger depth, NSIn
     } @catch (__unused NSException *e) {}
 }
 
-// 递归清除 layer 及其所有子层的黑色背景
 static void diClearBlackLayersRecursive(CALayer *layer, NSInteger depth, NSInteger *count) {
     if (!layer || depth > 50) return;
     @try {
         NSString *className = NSStringFromClass([layer class]);
-        // 跳过内容层
         BOOL isContentLayer = [className isEqualToString:@"CALayerHost"] ||
                                [className isEqualToString:@"CAPortalLayer"] ||
                                [className isEqualToString:@"CAGainMapLayer"] ||
@@ -87,7 +80,6 @@ static void diClearBlackLayersRecursive(CALayer *layer, NSInteger depth, NSInteg
             layer.backgroundColor = UIColor.clearColor.CGColor;
             if (count) (*count)++;
         }
-        // 对普通 CALayer，如果是纯背景层，直接隐藏
         if (!isContentLayer && layer.sublayers.count == 0 && !layer.contents &&
             layer.backgroundColor && diColorIsBlack(layer.backgroundColor)) {
             layer.hidden = YES;
@@ -100,9 +92,8 @@ static void diClearBlackLayersRecursive(CALayer *layer, NSInteger depth, NSInteg
     } @catch (__unused NSException *e) {}
 }
 
-#pragma mark - 全局清除
-
 static void diClearAllBlackBackgrounds(void) {
+    if (!gIsDIProcess) return;
     @try {
         NSInteger count = 0;
         for (UIWindow *window in [UIApplication sharedApplication].windows) {
@@ -115,12 +106,27 @@ static void diClearAllBlackBackgrounds(void) {
     } @catch (__unused NSException *e) {}
 }
 
-#pragma mark - Hooks
+#pragma mark - 判断是否是灵动岛相关进程
 
-// hook UIView setBackgroundColor: 拦截黑色
+static BOOL diIsDynamicIslandProcess(void) {
+    NSString *processName = [[NSProcessInfo processInfo] processName];
+    NSString *lowerName = [processName lowercaseString];
+    
+    // 包含这些关键词的进程都认为是灵动岛相关
+    NSArray *keywords = @[@"mediaremote", @"chrono", @"clockangel", @"incall", @"widgetrenderer"];
+    for (NSString *kw in keywords) {
+        if ([lowerName containsString:kw]) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+#pragma mark - Hooks（只在灵动岛进程里生效）
+
 %hook UIView
 - (void)setBackgroundColor:(UIColor *)color {
-    if (color && diColorIsBlack(color.CGColor)) {
+    if (gIsDIProcess && color && diColorIsBlack(color.CGColor)) {
         %orig(UIColor.clearColor);
         return;
     }
@@ -128,20 +134,21 @@ static void diClearAllBlackBackgrounds(void) {
 }
 - (void)didMoveToWindow {
     %orig;
-    if (self.window) {
+    if (gIsDIProcess && self.window) {
         diClearAllBlackBackgrounds();
     }
 }
 - (void)layoutSubviews {
     %orig;
-    diClearAllBlackBackgrounds();
+    if (gIsDIProcess) {
+        diClearAllBlackBackgrounds();
+    }
 }
 %end
 
-// hook CALayer setBackgroundColor: 拦截黑色
 %hook CALayer
 - (void)setBackgroundColor:(CGColorRef)color {
-    if (color && diColorIsBlack(color)) {
+    if (gIsDIProcess && color && diColorIsBlack(color)) {
         %orig(UIColor.clearColor.CGColor);
         return;
     }
@@ -149,33 +156,45 @@ static void diClearAllBlackBackgrounds(void) {
 }
 %end
 
-// hook UIViewController
 %hook UIViewController
 - (void)viewDidLoad {
     %orig;
-    diLog(@"viewDidLoad: %@", NSStringFromClass([self class]));
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        diClearAllBlackBackgrounds();
-    });
+    if (gIsDIProcess) {
+        diLog(@"viewDidLoad: %@", NSStringFromClass([self class]));
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            diClearAllBlackBackgrounds();
+        });
+    }
 }
 - (void)viewDidLayoutSubviews {
     %orig;
-    diClearAllBlackBackgrounds();
+    if (gIsDIProcess) {
+        diClearAllBlackBackgrounds();
+    }
 }
 %end
 
 // 初始化
 %ctor {
+    NSString *processName = [[NSProcessInfo processInfo] processName];
     diLog(@"=== SBLiquidGlassDI loaded ===");
-    diLog(@"Process: %@", [[NSProcessInfo processInfo] processName]);
+    diLog(@"Process: %@", processName);
     diLog(@"PID: %d", [[NSProcessInfo processInfo] processIdentifier]);
-
-    // 延迟清除
+    
+    gIsDIProcess = diIsDynamicIslandProcess();
+    diLog(@"Is DI process: %@", gIsDIProcess ? @"YES" : @"NO");
+    
+    if (!gIsDIProcess) {
+        diLog(@"Not a DI process, skipping hooks");
+        return;
+    }
+    
+    diLog(@"DI process detected, enabling black background clearing");
+    
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         diClearAllBlackBackgrounds();
     });
-
-    // 每 1 秒清除一次，防止系统恢复
+    
     NSTimer *timer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer * _Nonnull t) {
         diClearAllBlackBackgrounds();
     }];
