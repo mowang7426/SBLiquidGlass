@@ -1,6 +1,7 @@
-// Dynamic Island Native Test15 - 修复CABackdropLayer+正确容器层
-// 根本原因：黑色背景是 CABackdropLayer (bg=gray(0,0))，但之前被当成内容层排除了
-// 修复：清除 CABackdropLayer 的黑色背景色，找到正确的外层容器
+// Dynamic Island Native Test16 - 简化版：不找容器层，直接清除所有黑色背景
+// Test15 找容器层的函数太严格，一次都没找到
+// 简化：递归遍历所有层，CABackdropLayer 黑色背景就清除，普通 CALayer 黑色就隐藏
+// 玻璃层直接用 root 的 frame
 
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -51,7 +52,6 @@ static BOOL diColorIsBlack(CGColorRef color) {
 }
 
 // 真正的内容层（不能隐藏，不能清背景）
-// 注意：CABackdropLayer 不在这个列表里了！它是背景层，需要清除
 static BOOL diIsTrueContentLayer(CALayer *layer) {
     NSString *className = NSStringFromClass([layer class]);
     return [className isEqualToString:@"CALayerHost"] ||
@@ -66,7 +66,7 @@ static BOOL diIsTrueContentLayer(CALayer *layer) {
            [className isEqualToString:@"CAShapeLayer"];
 }
 
-// 递归清除所有层的黑色背景（包括 CABackdropLayer！）
+// 递归清除所有层的黑色背景
 static void diClearAllBlackLayersRecursive(CALayer *layer, NSInteger depth, NSInteger *hiddenCount, NSInteger *clearedCount) {
     if (!layer || depth > 50) return;
     @try {
@@ -141,38 +141,31 @@ static void diHideBackgroundViewsRecursive(UIView *view, NSInteger depth) {
     } @catch (__unused NSException *e) {}
 }
 
-// 找到灵动岛的最外层容器（尺寸约为灵动岛大小，有子层包含 CABackdropLayer）
-static CALayer *diFindIslandOuterContainer(CALayer *layer, NSInteger depth) {
-    if (!layer || depth > 20) return nil;
+// 找到灵动岛区域的 frame（遍历所有层，找到最大的非零 frame）
+static CGRect diFindIslandFrame(CALayer *layer) {
+    CGRect result = CGRectZero;
+    if (!layer) return result;
     @try {
-        CGRect bounds = layer.bounds;
-        CGFloat w = CGRectGetWidth(bounds);
-        CGFloat h = CGRectGetHeight(bounds);
-
-        NSString *className = NSStringFromClass([layer class]);
-        BOOL isBackdrop = [className rangeOfString:@"Backdrop" options:NSCaseInsensitiveSearch].location != NSNotFound;
-
-        // 最外层容器的特征：
-        // 1. 尺寸约为灵动岛大小（宽 100-450，高 25-100）
-        // 2. 子层里包含 CABackdropLayer
-        // 3. 类名是普通 CALayer（不是 CABackdropLayer）
-        if (!isBackdrop && w > 100 && w < 450 && h > 25 && h < 100) {
-            for (CALayer *sublayer in layer.sublayers) {
-                NSString *subClassName = NSStringFromClass([sublayer class]);
-                if ([subClassName rangeOfString:@"Backdrop" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-                    diLog(@"Found outer container: %@ bounds=%@",
-                          className, NSStringFromCGRect(bounds));
-                    return layer;
+        // 递归遍历所有层，找到有 cornerRadius 且尺寸合适的层
+        for (CALayer *sublayer in [layer.sublayers copy]) {
+            CGRect subFrame = sublayer.frame;
+            CGFloat w = CGRectGetWidth(subFrame);
+            CGFloat h = CGRectGetHeight(subFrame);
+            // 灵动岛的特征：有 cornerRadius，宽度 100-450，高度 25-100
+            if (sublayer.cornerRadius > 3 && w > 100 && w < 450 && h > 25 && h < 100) {
+                NSString *className = NSStringFromClass([sublayer class]);
+                if (![className isEqualToString:@"CABackdropLayer"] &&
+                    ![className isEqualToString:@"CALayerHost"]) {
+                    diLog(@"Found island frame layer: %@ frame=%@ cornerRadius=%.1f",
+                          className, NSStringFromCGRect(subFrame), sublayer.cornerRadius);
+                    return subFrame;
                 }
             }
-        }
-
-        for (CALayer *sublayer in [layer.sublayers copy]) {
-            CALayer *found = diFindIslandOuterContainer(sublayer, depth + 1);
-            if (found) return found;
+            CGRect found = diFindIslandFrame(sublayer);
+            if (!CGRectIsEmpty(found)) return found;
         }
     } @catch (__unused NSException *e) {}
-    return nil;
+    return result;
 }
 
 #pragma mark - 液态玻璃应用
@@ -185,6 +178,8 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
         });
 
         diLog(@"=== diApplyGlassToRoot called ===");
+        diLog(@"root.frame=%@ root.bounds=%@",
+              NSStringFromCGRect(root.frame), NSStringFromCGRect(root.bounds));
 
         if (!root || !root.window || !lgHostEnabled(@"DynamicIsland")) return;
         if (root.subviews.count == 0) return;
@@ -192,27 +187,29 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
         // 第一步：隐藏背景视图
         diHideBackgroundViewsRecursive(root, 0);
 
-        // 第二步：找到灵动岛的最外层容器
-        CALayer *outerContainer = diFindIslandOuterContainer(root.layer, 0);
-        if (!outerContainer) {
-            diLog(@"ERROR: Could not find outer container!");
-            return;
+        // 第二步：找到灵动岛区域的 frame
+        CGRect islandFrame = diFindIslandFrame(root.layer);
+        if (CGRectIsEmpty(islandFrame)) {
+            // 找不到就用 root 的 bounds
+            islandFrame = root.bounds;
+            diLog(@"Using root.bounds as island frame: %@", NSStringFromCGRect(islandFrame));
+        } else {
+            diLog(@"Using found island frame: %@", NSStringFromCGRect(islandFrame));
         }
 
-        diLog(@"Using outer container: %@ bounds=%@ frame=%@",
-              NSStringFromClass([outerContainer class]),
-              NSStringFromCGRect(outerContainer.bounds),
-              NSStringFromCGRect(outerContainer.frame));
-
-        // 第三步：清除所有黑色背景（包括 CABackdropLayer！）
+        // 第三步：清除所有黑色背景（不找容器层了，直接遍历所有层）
         NSInteger hiddenCount = 0, clearedCount = 0;
-        diClearAllBlackLayersRecursive(outerContainer, 0, &hiddenCount, &clearedCount);
         diClearAllBlackLayersRecursive(root.layer, 0, &hiddenCount, &clearedCount);
         diLog(@"Total: hidden %ld layers, cleared %ld CABackdropLayer backgrounds",
               (long)hiddenCount, (long)clearedCount);
 
-        // 第四步：计算玻璃层的 frame（用最外层容器的 frame，转换到 root 坐标系）
-        CGRect glassFrame = [root.layer convertRect:outerContainer.frame fromLayer:outerContainer.superlayer];
+        // 第四步：计算玻璃层的 frame（转换到 root 坐标系）
+        // islandFrame 是在 root.layer 的坐标系里的，直接用
+        CGRect glassFrame = islandFrame;
+        // 如果 glassFrame 太小或太大，调整一下
+        if (CGRectGetWidth(glassFrame) < 50 || CGRectGetHeight(glassFrame) < 20) {
+            glassFrame = root.bounds;
+        }
         diLog(@"Glass frame: %@", NSStringFromCGRect(glassFrame));
 
         // 创建或获取液态玻璃层
@@ -234,9 +231,8 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
 
         // 同步玻璃层的 frame 和 cornerRadius
         glass.frame = glassFrame;
-        CGFloat radius = outerContainer.cornerRadius;
-        if (radius <= 0.0)
-            radius = CGRectGetHeight(glassFrame) * 0.5;
+        CGFloat radius = CGRectGetHeight(glassFrame) * 0.5;
+        // 尝试从图层里找到 cornerRadius
         glass.layer.cornerRadius = radius;
         glass.layer.cornerCurve = kCACornerCurveContinuous;
         glass.layer.masksToBounds = YES;
@@ -253,7 +249,6 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
             @try {
                 NSInteger h = 0, c = 0;
                 diHideBackgroundViewsRecursive(root, 0);
-                diClearAllBlackLayersRecursive(outerContainer, 0, &h, &c);
                 diClearAllBlackLayersRecursive(root.layer, 0, &h, &c);
                 diLog(@"Delayed clear: hidden %ld, cleared %ld", (long)h, (long)c);
             } @catch (__unused NSException *e) {}
