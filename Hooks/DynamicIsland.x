@@ -4,7 +4,7 @@
 #import "../Shared/LGGlassKit.h"
 #import <objc/runtime.h>
 
-// Native Dynamic Island Test4.
+// Native Dynamic Island Test5.
 // IMPORTANT: _SBSystemApertureContainerViewContentView has an internal
 // invariant about its child contentView. Never insert our own subview into it.
 // The previous Test3 violated that invariant and caused sbsa_onlyObjectOrNilAssert.
@@ -35,6 +35,32 @@ static void diClearBackgroundOnly(UIView *view) {
         view.layer.backgroundColor = UIColor.clearColor.CGColor;
         view.opaque = NO;
     } @catch (__unused NSException *e) {}
+}
+
+
+static void diNeutralizeVisualEffectBackgrounds(UIView *view) {
+    if (!view) return;
+
+    NSString *n = NSStringFromClass(view.class);
+    BOOL isEffect =
+        [n isEqualToString:@"UIVisualEffectView"] ||
+        [n isEqualToString:@"_UIVisualEffectView"] ||
+        [n rangeOfString:@"Backdrop" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+        [n rangeOfString:@"Material" options:NSCaseInsensitiveSearch].location != NSNotFound;
+
+    if (isEffect) {
+        // Do not remove the view or alter its hierarchy. If this is the
+        // native dark material, nil'ing the effect is the least invasive
+        // reversible test and leaves its content/subviews intact.
+        @try {
+            if ([view respondsToSelector:@selector(setEffect:)])
+                [(UIVisualEffectView *)view setEffect:nil];
+        } @catch (__unused NSException *e) {}
+        diClearBackgroundOnly(view);
+    }
+
+    for (UIView *sub in [view.subviews copy])
+        diNeutralizeVisualEffectBackgrounds(sub);
 }
 
 static void diClearKnownNativeBackgrounds(UIView *view) {
@@ -113,7 +139,7 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
             objc_setAssociatedObject(root, kDIContentKey, content, OBJC_ASSOCIATION_ASSIGN);
 
             @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
-            NSLog(@"[SBLiquidGlass-DI-NativeTest4] glass sibling attached root=%@ content=%@ filter=%@",
+            NSLog(@"[SBLiquidGlass-DI-NativeTest5] glass sibling attached root=%@ content=%@ filter=%@",
                   NSStringFromClass(root.class), NSStringFromClass(content.class), filterType);
         }
 
@@ -130,7 +156,7 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
 
         diSyncGlassToContent(root, content, glass);
     } @catch (NSException *e) {
-        NSLog(@"[SBLiquidGlass-DI-NativeTest4] exception: %@", e);
+        NSLog(@"[SBLiquidGlass-DI-NativeTest5] exception: %@", e);
     }
 }
 
@@ -166,6 +192,7 @@ static void diRemoveGlass(SBSystemApertureContainerView *root) {
     if (self.window) {
         diClearBackgroundOnly(self);
         diClearKnownNativeBackgrounds(self);
+        diNeutralizeVisualEffectBackgrounds(self);
     }
 }
 
@@ -174,6 +201,7 @@ static void diRemoveGlass(SBSystemApertureContainerView *root) {
     if (self.window) {
         diClearBackgroundOnly(self);
         diClearKnownNativeBackgrounds(self);
+        diNeutralizeVisualEffectBackgrounds(self);
     }
 }
 
@@ -181,17 +209,6 @@ static void diRemoveGlass(SBSystemApertureContainerView *root) {
     // Safe: preserve Apple's setter and only replace the color value.
     if (self.window && diIsNativeApertureView(self)) %orig(UIColor.clearColor);
     else %orig(color);
-}
-
-// Native Dynamic Island Test4: if the black surface is produced by the
-// content view's own drawRect:, suppress only that custom background drawing.
-// Child views (artwork/text/buttons) remain intact.
-- (void)drawRect:(CGRect)rect {
-    if (self.window && diIsNativeApertureView(self)) {
-        NSLog(@"[SBLiquidGlass-DI-NativeTest4] suppress drawRect for native content view");
-        return;
-    }
-    %orig(rect);
 }
 
 %end
