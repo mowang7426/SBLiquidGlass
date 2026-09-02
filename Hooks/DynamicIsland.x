@@ -4,192 +4,204 @@
 #import "../Shared/LGGlassKit.h"
 #import <objc/runtime.h>
 
-// Native Dynamic Island: the black platter is NOT the outer
-// SBSystemApertureContainerView.  Apple keeps it in
-// _SBSystemApertureContainerViewContentView / SBFTouchPassThroughView.
-// This test hooks those real content/background nodes and puts our glass
-// behind Apple's content instead of merely stacking glass on top of black.
+// Native Dynamic Island Test4.
+// IMPORTANT: _SBSystemApertureContainerViewContentView has an internal
+// invariant about its child contentView. Never insert our own subview into it.
+// The previous Test3 violated that invariant and caused sbsa_onlyObjectOrNilAssert.
 
 @interface SBSystemApertureContainerView : UIView
 @end
-
 @interface _SBSystemApertureContainerViewContentView : UIView
 @end
-
 @interface SBFTouchPassThroughView : UIView
 @end
 
 static void *kDIGlassKey = &kDIGlassKey;
+static void *kDIContentKey = &kDIContentKey;
 
-static BOOL diIsInsideNativeAperture(UIView *view) {
-    UIView *p = view;
-    for (NSInteger i = 0; p && i < 8; i++, p = p.superview) {
-        NSString *name = NSStringFromClass(p.class);
-        if ([name isEqualToString:@"SBSystemApertureContainerView"] ||
-            [name isEqualToString:@"_SBSystemApertureContainerViewContentView"])
+static BOOL diIsNativeApertureView(UIView *view) {
+    for (UIView *p = view; p; p = p.superview) {
+        NSString *n = NSStringFromClass(p.class);
+        if ([n isEqualToString:@"SBSystemApertureContainerView"])
             return YES;
     }
     return NO;
 }
 
-static void diMakeNativeContentTransparent(UIView *view) {
+static void diClearBackgroundOnly(UIView *view) {
     if (!view) return;
     @try {
-        // This is the actual native Dynamic Island content/background view.
         view.backgroundColor = UIColor.clearColor;
         view.layer.backgroundColor = UIColor.clearColor.CGColor;
         view.opaque = NO;
-
-        // Do not touch the content subviews here. Apple owns their layout.
     } @catch (__unused NSException *e) {}
 }
 
-static void diSyncNativeGlass(UIView *host, LGLiveBackdropView *glass) {
-    if (!host || !glass) return;
+static void diClearKnownNativeBackgrounds(UIView *view) {
+    if (!view) return;
+    NSString *n = NSStringFromClass(view.class);
 
-    glass.frame = host.bounds;
+    // Do NOT recursively modify arbitrary Apple subviews. Only target known
+    // material/platter/background classes, because Apple's content hierarchy
+    // has strict child-count/layout assumptions.
+    if ([n rangeOfString:@"Background" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+        [n rangeOfString:@"Backdrop" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+        [n rangeOfString:@"Material" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+        [n rangeOfString:@"Platter" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+        diClearBackgroundOnly(view);
+    }
+
+    for (UIView *sub in [view.subviews copy]) {
+        diClearKnownNativeBackgrounds(sub);
+    }
+}
+
+static void diSyncGlassToContent(UIView *container, UIView *content, LGLiveBackdropView *glass) {
+    if (!container || !content || !glass) return;
+
+    // Glass is a SIBLING of Apple's special content view, never its child.
+    glass.frame = content.frame;
     glass.autoresizingMask = UIViewAutoresizingFlexibleWidth |
                              UIViewAutoresizingFlexibleHeight;
     glass.backgroundColor = UIColor.clearColor;
     glass.alpha = 1.0;
 
-    CGFloat radius = host.layer.cornerRadius;
+    CGFloat radius = content.layer.cornerRadius;
     if (radius <= 0.0)
-        radius = MIN(CGRectGetWidth(host.bounds),
-                     CGRectGetHeight(host.bounds)) * 0.5;
-
+        radius = MIN(CGRectGetWidth(content.bounds), CGRectGetHeight(content.bounds)) * 0.5;
     glass.layer.cornerRadius = radius;
     glass.layer.cornerCurve = kCACornerCurveContinuous;
     glass.layer.masksToBounds = YES;
 }
 
-static void diApplyNativeGlass(_SBSystemApertureContainerViewContentView *host) {
+static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
     @try {
-        if (!host || !host.window || !lgHostEnabled(@"DynamicIsland")) return;
-        if (CGRectIsEmpty(host.bounds) || CGRectGetWidth(host.bounds) < 10.0) return;
+        if (!root || !root.window || !lgHostEnabled(@"DynamicIsland")) return;
+        if (root.subviews.count == 0) return;
 
-        // CRITICAL: remove Apple's opaque black content background first.
-        diMakeNativeContentTransparent(host);
+        UIView *content = nil;
+        for (UIView *sub in [root.subviews copy]) {
+            if ([NSStringFromClass(sub.class) isEqualToString:@"_SBSystemApertureContainerViewContentView"]) {
+                content = sub;
+                break;
+            }
+        }
+        if (!content || CGRectIsEmpty(content.bounds)) return;
 
-        LGLiveBackdropView *glass = objc_getAssociatedObject(host, kDIGlassKey);
+        // First make the special content view's own layer transparent.
+        // This does not change its children or its bounds.
+        diClearBackgroundOnly(content);
+        diClearKnownNativeBackgrounds(content);
+
+        LGLiveBackdropView *glass = objc_getAssociatedObject(root, kDIGlassKey);
         if (!glass) {
             NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
-            if (!filterType.length)
-                filterType = @"dylv.liquidglass.dynamicisland";
+            if (!filterType.length) filterType = @"dylv.liquidglass.dynamicisland";
 
-            glass = [[LGLiveBackdropView alloc] initWithFrame:host.bounds
+            glass = [[LGLiveBackdropView alloc] initWithFrame:content.frame
                                                      groupName:nil
                                                     filterType:filterType];
             glass.backgroundColor = UIColor.clearColor;
-            glass.alpha = 1.0;
+            glass.userInteractionEnabled = NO;
 
-            // Glass is the FIRST layer in the real content view.
-            // Apple's text/buttons remain above it.
-            [host insertSubview:glass atIndex:0];
+            // SIBLING insertion: never touch _SBSystemApertureContainerViewContentView.subviews.
+            NSUInteger idx = [root.subviews indexOfObject:content];
+            if (idx == NSNotFound) idx = 0;
+            [root insertSubview:glass atIndex:idx];
 
-            objc_setAssociatedObject(host, kDIGlassKey, glass,
-                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(root, kDIGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(root, kDIContentKey, content, OBJC_ASSOCIATION_ASSIGN);
 
             @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
-
-            NSLog(@"[SBLiquidGlass-DI-NativeTest3] glass attached to CONTENT %@ filter=%@",
-                  NSStringFromClass(host.class), filterType);
+            NSLog(@"[SBLiquidGlass-DI-NativeTest4] glass sibling attached root=%@ content=%@ filter=%@",
+                  NSStringFromClass(root.class), NSStringFromClass(content.class), filterType);
         }
 
-        diSyncNativeGlass(host, glass);
+        // Apple may reorder its content view during transitions; always put
+        // our glass immediately BELOW it so text/buttons remain untouched.
+        if (glass.superview != root) {
+            [root insertSubview:glass atIndex:0];
+        } else {
+            NSUInteger contentIndex = [root.subviews indexOfObject:content];
+            if (contentIndex != NSNotFound && [root.subviews indexOfObject:glass] != contentIndex - 1) {
+                [root insertSubview:glass atIndex:contentIndex];
+            }
+        }
+
+        diSyncGlassToContent(root, content, glass);
     } @catch (NSException *e) {
-        NSLog(@"[SBLiquidGlass-DI-NativeTest3] exception: %@", e);
+        NSLog(@"[SBLiquidGlass-DI-NativeTest4] exception: %@", e);
     }
 }
 
-static void diRemoveNativeGlass(_SBSystemApertureContainerViewContentView *host) {
+static void diRemoveGlass(SBSystemApertureContainerView *root) {
     @try {
-        LGLiveBackdropView *glass = objc_getAssociatedObject(host, kDIGlassKey);
-        if (glass) {
-            [glass removeFromSuperview];
-            objc_setAssociatedObject(host, kDIGlassKey, nil,
-                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        }
+        LGLiveBackdropView *glass = objc_getAssociatedObject(root, kDIGlassKey);
+        if (glass) [glass removeFromSuperview];
+        objc_setAssociatedObject(root, kDIGlassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(root, kDIContentKey, nil, OBJC_ASSOCIATION_ASSIGN);
     } @catch (__unused NSException *e) {}
 }
-
-#pragma mark - Native Dynamic Island root
 
 %hook SBSystemApertureContainerView
 
 - (void)didMoveToWindow {
     %orig;
-    if (!self.window) return;
-
-    // The content view is created/attached by Apple after the outer root.
-    for (UIView *sub in [self.subviews copy]) {
-        if ([NSStringFromClass(sub.class) isEqualToString:@"_SBSystemApertureContainerViewContentView"]) {
-            diApplyNativeGlass((_SBSystemApertureContainerViewContentView *)sub);
-        }
-    }
+    if (self.window) diApplyGlassToRoot(self);
+    else diRemoveGlass(self);
 }
 
 - (void)layoutSubviews {
     %orig;
-
-    for (UIView *sub in [self.subviews copy]) {
-        if ([NSStringFromClass(sub.class) isEqualToString:@"_SBSystemApertureContainerViewContentView"]) {
-            diApplyNativeGlass((_SBSystemApertureContainerViewContentView *)sub);
-        }
-    }
+    if (self.window) diApplyGlassToRoot(self);
 }
 
 %end
-
-#pragma mark - Real native black platter/content view
 
 %hook _SBSystemApertureContainerViewContentView
 
 - (void)didMoveToWindow {
     %orig;
-    if (self.window) diApplyNativeGlass(self);
-    else diRemoveNativeGlass(self);
+    // Do not add/remove subviews here. This class has an internal contentView invariant.
+    if (self.window) {
+        diClearBackgroundOnly(self);
+        diClearKnownNativeBackgrounds(self);
+    }
 }
 
 - (void)layoutSubviews {
     %orig;
-    diApplyNativeGlass(self);
-}
-
-- (void)setBackgroundColor:(UIColor *)color {
-    // Apple may rewrite the black background during every state transition.
-    // Keep this private content view transparent while preserving the setter
-    // for all other behavior.
-    if (self.window && diIsInsideNativeAperture(self)) {
-        %orig(UIColor.clearColor);
-    } else {
-        %orig(color);
+    if (self.window) {
+        diClearBackgroundOnly(self);
+        diClearKnownNativeBackgrounds(self);
     }
 }
 
-%end
+- (void)setBackgroundColor:(UIColor *)color {
+    // Safe: preserve Apple's setter and only replace the color value.
+    if (self.window && diIsNativeApertureView(self)) %orig(UIColor.clearColor);
+    else %orig(color);
+}
 
-#pragma mark - Native platter alpha node
+%end
 
 %hook SBFTouchPassThroughView
 
 - (void)layoutSubviews {
     %orig;
+    if (!diIsNativeApertureView(self)) return;
 
-    // VisibleIsland's research found the native aperture background/alpha
-    // node at subviews[2].  Scope it strictly to the Dynamic Island so this
-    // hook cannot alter unrelated SBFTouchPassThroughView instances.
-    if (!diIsInsideNativeAperture(self)) return;
-    if (self.subviews.count < 3) return;
-
-    @try {
-        UIView *nativePlatter = self.subviews[2];
-        if (nativePlatter != objc_getAssociatedObject(self, kDIGlassKey)) {
-            nativePlatter.backgroundColor = UIColor.clearColor;
-            nativePlatter.layer.backgroundColor = UIColor.clearColor.CGColor;
-            nativePlatter.alpha = 0.0;
+    // Only clear the known platter/background node; NEVER set alpha on the
+    // whole touch-pass-through hierarchy, since it may contain live content.
+    for (UIView *sub in [self.subviews copy]) {
+        NSString *n = NSStringFromClass(sub.class);
+        if ([n rangeOfString:@"Background" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+            [n rangeOfString:@"Backdrop" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+            [n rangeOfString:@"Platter" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+            [n rangeOfString:@"Material" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+            diClearBackgroundOnly(sub);
         }
-    } @catch (__unused NSException *e) {}
+    }
 }
 
 %end
