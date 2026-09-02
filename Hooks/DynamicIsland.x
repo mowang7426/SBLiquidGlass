@@ -1,5 +1,5 @@
-// Dynamic Island Native Test18 - 参考 Liquidify 实现方式
-// 修复：直接用 root.bounds 作为玻璃层 frame，删除未使用函数
+// Dynamic Island Native Test19 - 安全版，不误隐藏内容视图
+// 修复：只隐藏纯背景视图（没有子视图、没有 contents），不隐藏内容视图（专辑封面等）
 
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -63,14 +63,17 @@ static BOOL diIsTrueContentLayer(CALayer *layer) {
            [className isEqualToString:@"CAShapeLayer"];
 }
 
-static void diClearAllBlackLayersRecursive(CALayer *layer, NSInteger depth, NSInteger *hiddenCount, NSInteger *clearedCount) {
+// 安全版：只清除纯背景层的黑色背景，不隐藏任何层（避免误隐藏内容）
+static void diClearAllBlackLayersRecursive(CALayer *layer, NSInteger depth, NSInteger *clearedCount) {
     if (!layer || depth > 50) return;
     @try {
+        // 真正的内容层跳过
         if (diIsTrueContentLayer(layer)) return;
         
         NSString *className = NSStringFromClass([layer class]);
         BOOL isBackdrop = [className rangeOfString:@"Backdrop" options:NSCaseInsensitiveSearch].location != NSNotFound;
         
+        // 对 CABackdropLayer：只清除背景色，不隐藏（保留模糊效果）
         if (isBackdrop) {
             if (diColorIsBlack(layer.backgroundColor)) {
                 diLog(@"Clearing CABackdropLayer black bg: %@ bounds=%@",
@@ -79,43 +82,49 @@ static void diClearAllBlackLayersRecursive(CALayer *layer, NSInteger depth, NSIn
                 if (clearedCount) (*clearedCount)++;
             }
             for (CALayer *sublayer in [layer.sublayers copy]) {
-                diClearAllBlackLayersRecursive(sublayer, depth + 1, hiddenCount, clearedCount);
+                diClearAllBlackLayersRecursive(sublayer, depth + 1, clearedCount);
             }
             return;
         }
         
+        // 对普通 CALayer：只清除背景色，不隐藏（避免误隐藏内容）
         if (diColorIsBlack(layer.backgroundColor)) {
-            diLog(@"Hiding black CALayer: %@ bounds=%@",
+            diLog(@"Clearing CALayer black bg: %@ bounds=%@",
                   className, NSStringFromCGRect(layer.bounds));
-            layer.hidden = YES;
-            layer.opacity = 0.0;
             layer.backgroundColor = UIColor.clearColor.CGColor;
-            if (hiddenCount) (*hiddenCount)++;
-            return;
+            if (clearedCount) (*clearedCount)++;
         }
         
         for (CALayer *sublayer in [layer.sublayers copy]) {
-            diClearAllBlackLayersRecursive(sublayer, depth + 1, hiddenCount, clearedCount);
+            diClearAllBlackLayersRecursive(sublayer, depth + 1, clearedCount);
         }
     } @catch (__unused NSException *e) {}
 }
 
+// 安全版：只清除背景视图的背景色，不隐藏任何视图（避免误隐藏专辑封面等内容）
 static void diHideBackgroundViewsRecursive(UIView *view, NSInteger depth) {
     if (!view || depth > 20) return;
     @try {
         NSString *className = NSStringFromClass([view class]);
-        if ([className rangeOfString:@"LumaTrackingBackdrop" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-            [className rangeOfString:@"AdaptiveKeyLineBackdrop" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-            [className rangeOfString:@"MTMaterialView" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-            [className rangeOfString:@"MaterialView" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-            [className rangeOfString:@"SystemBackground" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-            diLog(@"Hiding background view: %@ frame=%@", className, NSStringFromCGRect(view.frame));
-            view.hidden = YES;
-            view.alpha = 0.0;
+        
+        // 只对明确的背景类清除背景色，不隐藏
+        BOOL isBackgroundClass = [className rangeOfString:@"LumaTrackingBackdrop" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                                 [className rangeOfString:@"AdaptiveKeyLineBackdrop" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                                 [className isEqualToString:@"MTMaterialView"] ||
+                                 [className isEqualToString:@"_UISystemBackgroundView"];
+        
+        if (isBackgroundClass) {
+            diLog(@"Clearing background view: %@ frame=%@", className, NSStringFromCGRect(view.frame));
+            view.backgroundColor = UIColor.clearColor;
+            // 不隐藏，只清除背景色，避免影响内容
         }
-        if (view.backgroundColor && diColorIsBlack(view.backgroundColor.CGColor)) {
+        
+        // 对所有视图，如果背景是纯黑色且没有子视图，才清除背景色
+        if (view.backgroundColor && diColorIsBlack(view.backgroundColor.CGColor) &&
+            view.subviews.count == 0 && !view.layer.contents) {
             view.backgroundColor = UIColor.clearColor;
         }
+        
         for (UIView *subview in [view.subviews copy]) {
             diHideBackgroundViewsRecursive(subview, depth + 1);
         }
@@ -138,18 +147,17 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
         if (!root || !root.window || !lgHostEnabled(@"DynamicIsland")) return;
         if (root.subviews.count == 0) return;
         
-        // 第一步：隐藏背景视图（包括 _UISystemBackgroundView 和 MTMaterialView）
+        // 第一步：安全清除背景视图（只清除背景色，不隐藏）
         diHideBackgroundViewsRecursive(root, 0);
         
-        // 第二步：直接用 root.bounds 作为灵动岛区域的 frame（最准确，不会有坐标系偏移）
+        // 第二步：直接用 root.bounds 作为灵动岛区域的 frame
         CGRect islandFrame = root.bounds;
         diLog(@"Using root.bounds as island frame: %@", NSStringFromCGRect(islandFrame));
         
-        // 第三步：清除所有黑色背景
-        NSInteger hiddenCount = 0, clearedCount = 0;
-        diClearAllBlackLayersRecursive(root.layer, 0, &hiddenCount, &clearedCount);
-        diLog(@"Total: hidden %ld layers, cleared %ld CABackdropLayer backgrounds",
-              (long)hiddenCount, (long)clearedCount);
+        // 第三步：安全清除所有黑色背景（只清除背景色，不隐藏）
+        NSInteger clearedCount = 0;
+        diClearAllBlackLayersRecursive(root.layer, 0, &clearedCount);
+        diLog(@"Total: cleared %ld layer backgrounds", (long)clearedCount);
         
         // 第四步：玻璃层 frame 直接用 root.bounds
         CGRect glassFrame = islandFrame;
@@ -192,10 +200,10 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
         // 第五步：延迟多次清除（防止系统恢复）
         void (^clearBlock)(void) = ^{
             @try {
-                NSInteger h = 0, c = 0;
+                NSInteger c = 0;
                 diHideBackgroundViewsRecursive(root, 0);
-                diClearAllBlackLayersRecursive(root.layer, 0, &h, &c);
-                diLog(@"Delayed clear: hidden %ld, cleared %ld", (long)h, (long)c);
+                diClearAllBlackLayersRecursive(root.layer, 0, &c);
+                diLog(@"Delayed clear: cleared %ld backgrounds", (long)c);
             } @catch (__unused NSException *e) {}
         };
         
