@@ -8,5 +8,13 @@
             "com.apple.ClockAngel",
             "com.apple.InCallService"
         );
+        Executables = (
+            "MediaRemoteUI",
+            "chronod",
+            "WidgetRenderer_Default",
+            "WidgetRenderer_CarPlay",
+            "ClockAngel",
+            "InCallService"
+        );
     };
 }
