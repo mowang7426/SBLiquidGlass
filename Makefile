@@ -24,6 +24,7 @@ include $(THEOS)/makefiles/tweak.mk
 SUBPROJECTS += SBLiquidGlassBackboardd
 SUBPROJECTS += SBLiquidGlassRWB
 SUBPROJECTS += SBLiquidGlassPrefs
+SUBPROJECTS += SBLiquidGlassDI
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 # originally i tried to add `release::` here but apparently that keeps breaking for whatever fucking reason so i decided to create `release.sh`
