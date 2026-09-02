@@ -1,5 +1,6 @@
 // DIContentClear - 灵动岛内容进程黑色背景清除（参考 Liquidify 实现）
 // 关键：hook _UISystemBackgroundView 和 MTMaterialView，这两个才是灵动岛黑色背景的真正来源
+// 修复：hook 私有类时，把 self 强制转换成 UIView *
 
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -38,7 +39,6 @@ static BOOL diContentIsDynamicIslandProcess(void) {
     NSString *processName = [[NSProcessInfo processInfo] processName];
     NSString *lowerName = [processName lowercaseString];
     
-    // 参考 Liquidify 的进程列表
     NSArray *keywords = @[@"mediaremote", @"chrono", @"clockangel", @"incall", @"widgetrenderer"];
     for (NSString *kw in keywords) {
         if ([lowerName containsString:kw]) {
@@ -54,15 +54,12 @@ static void diContentClearView(UIView *view) {
     if (!gIsDIContentProcess || !view) return;
     @try {
         NSString *className = NSStringFromClass([view class]);
-        diContentLog(@"Clearing background for view: %@ frame=%@ bg=%@",
-                     className, NSStringFromCGRect(view.frame), view.backgroundColor);
+        diContentLog(@"Clearing background for view: %@ frame=%@",
+                     className, NSStringFromCGRect(view.frame));
         
-        // 清除背景色
         view.backgroundColor = UIColor.clearColor;
         view.alpha = 0.0;
         view.hidden = YES;
-        
-        // 清除 layer 背景色
         view.layer.backgroundColor = UIColor.clearColor.CGColor;
         view.layer.opacity = 0.0;
         view.layer.hidden = YES;
@@ -75,16 +72,17 @@ static void diContentClearView(UIView *view) {
 
 - (void)didMoveToWindow {
     %orig;
-    if (gIsDIContentProcess && self.window) {
+    UIView *selfView = (UIView *)self;
+    if (gIsDIContentProcess && selfView.window) {
         diContentLog(@"_UISystemBackgroundView didMoveToWindow, clearing...");
-        diContentClearView(self);
+        diContentClearView(selfView);
     }
 }
 
 - (void)layoutSubviews {
     %orig;
     if (gIsDIContentProcess) {
-        diContentClearView(self);
+        diContentClearView((UIView *)self);
     }
 }
 
@@ -92,8 +90,9 @@ static void diContentClearView(UIView *view) {
     if (gIsDIContentProcess) {
         diContentLog(@"_UISystemBackgroundView setBackgroundColor intercepted: %@", color);
         %orig(UIColor.clearColor);
-        self.alpha = 0.0;
-        self.hidden = YES;
+        UIView *selfView = (UIView *)self;
+        selfView.alpha = 0.0;
+        selfView.hidden = YES;
         return;
     }
     %orig(color);
@@ -107,16 +106,17 @@ static void diContentClearView(UIView *view) {
 
 - (void)didMoveToWindow {
     %orig;
-    if (gIsDIContentProcess && self.window) {
+    UIView *selfView = (UIView *)self;
+    if (gIsDIContentProcess && selfView.window) {
         diContentLog(@"MTMaterialView didMoveToWindow, clearing...");
-        diContentClearView(self);
+        diContentClearView(selfView);
     }
 }
 
 - (void)layoutSubviews {
     %orig;
     if (gIsDIContentProcess) {
-        diContentClearView(self);
+        diContentClearView((UIView *)self);
     }
 }
 
@@ -124,8 +124,9 @@ static void diContentClearView(UIView *view) {
     if (gIsDIContentProcess) {
         diContentLog(@"MTMaterialView setBackgroundColor intercepted: %@", color);
         %orig(UIColor.clearColor);
-        self.alpha = 0.0;
-        self.hidden = YES;
+        UIView *selfView = (UIView *)self;
+        selfView.alpha = 0.0;
+        selfView.hidden = YES;
         return;
     }
     %orig(color);
@@ -158,7 +159,6 @@ static void diContentClearView(UIView *view) {
     %orig;
     if (gIsDIContentProcess && self.window) {
         NSString *className = NSStringFromClass([self class]);
-        // 对背景视图类直接清除
         if ([className containsString:@"Background"] ||
             [className containsString:@"Backdrop"] ||
             [className containsString:@"Material"]) {
@@ -211,7 +211,6 @@ static void diContentClearView(UIView *view) {
     diContentLog(@"DI content process detected, enabling black background clearing");
     diContentLog(@"Hooking _UISystemBackgroundView and MTMaterialView...");
     
-    // 延迟清除一次
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         @try {
             for (UIWindow *window in [UIApplication sharedApplication].windows) {
@@ -228,7 +227,6 @@ static void diContentClearView(UIView *view) {
         } @catch (__unused NSException *e) {}
     });
     
-    // 定时清除，防止系统恢复
     NSTimer *timer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer * _Nonnull t) {
         @try {
             for (UIWindow *window in [UIApplication sharedApplication].windows) {
