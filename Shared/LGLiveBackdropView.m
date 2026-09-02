@@ -16,6 +16,9 @@ static BOOL sLGAppInBackground = NO;
 static const void *kLGOutsetKey = &kLGOutsetKey;
 static const void *kLGRadiusKey = &kLGRadiusKey;
 static const void *kLGSpecularEnabledOverrideKey = &kLGSpecularEnabledOverrideKey;
+// 每个玻璃实例独立保存布局/滤镜节流状态，避免不同实例共享 static 状态互相阻塞。
+static const void *kLGLastLayoutBoundsKey = &kLGLastLayoutBoundsKey;
+static const void *kLGLastLayoutApplyTimeKey = &kLGLastLayoutApplyTimeKey;
 
 static NSDictionary<NSString *, id> *sLGGlassPreferences;
 
@@ -455,17 +458,21 @@ static const CGFloat kLGSpecularBrightBoostOpacity = 0.70;
     if (self.hidden || self.alpha < 0.01 || !self.window) return;
     if (CGRectIsEmpty(self.bounds) || CGRectGetWidth(self.bounds) < 1) return;
     
-    // 变化检测：只有 bounds 真正变化时才需要重新渲染
-    static CGRect sLastBounds = {0};
-    if (CGRectEqualToRect(self.bounds, sLastBounds)) {
-        return; // bounds 没变化，跳过渲染
+    // 变化检测：只有当前实例的 bounds 真正变化时才触发昂贵的滤镜重配置。
+    NSValue *lastBoundsValue = objc_getAssociatedObject(self, kLGLastLayoutBoundsKey);
+    if (lastBoundsValue && CGRectEqualToRect(self.bounds, lastBoundsValue.CGRectValue)) {
+        return;
     }
-    sLastBounds = self.bounds;
-    
-    static NSTimeInterval sLastApplyTime = 0;
+    objc_setAssociatedObject(self, kLGLastLayoutBoundsKey,
+                             [NSValue valueWithCGRect:self.bounds],
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    // 布局风暴期间限制滤镜重配置频率；真正的参数刷新仍由 applyFilters 直接触发。
     NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
-    if (now - sLastApplyTime > 0.15) { // 最多每150ms调用一次（约6-7fps）
-        sLastApplyTime = now;
+    NSNumber *lastApply = objc_getAssociatedObject(self, kLGLastLayoutApplyTimeKey);
+    if (!lastApply || now - lastApply.doubleValue > 0.15) {
+        objc_setAssociatedObject(self, kLGLastLayoutApplyTimeKey, @(now),
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         [self applyFilters];
         [self updateSpecular];
     }
