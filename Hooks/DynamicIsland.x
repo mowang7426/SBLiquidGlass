@@ -187,15 +187,9 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
         // 第一步：隐藏背景视图
         diHideBackgroundViewsRecursive(root, 0);
 
-        // 第二步：找到灵动岛区域的 frame
-        CGRect islandFrame = diFindIslandFrame(root.layer);
-        if (CGRectIsEmpty(islandFrame)) {
-            // 找不到就用 root 的 bounds
-            islandFrame = root.bounds;
-            diLog(@"Using root.bounds as island frame: %@", NSStringFromCGRect(islandFrame));
-        } else {
-            diLog(@"Using found island frame: %@", NSStringFromCGRect(islandFrame));
-        }
+        // 第二步：直接用 root.bounds 作为灵动岛区域的 frame（最准确，不会有坐标系偏移）
+        CGRect islandFrame = root.bounds;
+        diLog(@"Using root.bounds as island frame: %@", NSStringFromCGRect(islandFrame));
 
         // 第三步：清除所有黑色背景（不找容器层了，直接遍历所有层）
         NSInteger hiddenCount = 0, clearedCount = 0;
@@ -231,8 +225,9 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
 
         // 同步玻璃层的 frame 和 cornerRadius
         glass.frame = glassFrame;
-        CGFloat radius = CGRectGetHeight(glassFrame) * 0.5;
-        // 尝试从图层里找到 cornerRadius
+        // 优先用 root.layer 的 cornerRadius，没有的话用高度的一半
+        CGFloat radius = root.layer.cornerRadius;
+        if (radius <= 0) radius = CGRectGetHeight(glassFrame) * 0.5;
         glass.layer.cornerRadius = radius;
         glass.layer.cornerCurve = kCACornerCurveContinuous;
         glass.layer.masksToBounds = YES;
