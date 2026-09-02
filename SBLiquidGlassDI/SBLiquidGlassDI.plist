@@ -1,0 +1,12 @@
+{
+    Filter = {
+        Bundles = (
+            "com.apple.MediaRemoteUI",
+            "com.apple.chronod",
+            "com.apple.chrono.WidgetRenderer-Default",
+            "com.apple.chrono.WidgetRenderer-CarPlay",
+            "com.apple.ClockAngel",
+            "com.apple.InCallService"
+        );
+    };
+}
