@@ -9,14 +9,5 @@
             "com.apple.ClockAngel",
             "com.apple.InCallService"
         );
-        Executables = (
-            "SpringBoard",
-            "MediaRemoteUI",
-            "chronod",
-            "ClockAngel",
-            "InCallService",
-            "WidgetRenderer_Default",
-            "WidgetRenderer_CarPlay"
-        );
     };
 }
