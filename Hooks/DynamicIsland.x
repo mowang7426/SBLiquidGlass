@@ -1,6 +1,5 @@
-// Dynamic Island Native Test17 - 参考 Liquidify 实现方式
-// 修复：直接用 root.bounds 作为玻璃层 frame，不再有坐标系偏移
-// 修复：删除未使用的 diFindIslandFrame 函数，避免编译错误
+// Dynamic Island Native Test18 - 参考 Liquidify 实现方式
+// 修复：直接用 root.bounds 作为玻璃层 frame，删除未使用函数
 
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -50,7 +49,6 @@ static BOOL diColorIsBlack(CGColorRef color) {
     return a > 0.05 && r < 0.25 && g < 0.25 && b < 0.25;
 }
 
-// 真正的内容层（不能隐藏，不能清背景）
 static BOOL diIsTrueContentLayer(CALayer *layer) {
     NSString *className = NSStringFromClass([layer class]);
     return [className isEqualToString:@"CALayerHost"] ||
@@ -65,7 +63,6 @@ static BOOL diIsTrueContentLayer(CALayer *layer) {
            [className isEqualToString:@"CAShapeLayer"];
 }
 
-// 递归清除所有层的黑色背景
 static void diClearAllBlackLayersRecursive(CALayer *layer, NSInteger depth, NSInteger *hiddenCount, NSInteger *clearedCount) {
     if (!layer || depth > 50) return;
     @try {
@@ -97,21 +94,12 @@ static void diClearAllBlackLayersRecursive(CALayer *layer, NSInteger depth, NSIn
             return;
         }
         
-        if (layer.backgroundColor) {
-            size_t n = CGColorGetNumberOfComponents(layer.backgroundColor);
-            const CGFloat *c = CGColorGetComponents(layer.backgroundColor);
-            if (c && n >= 4 && c[3] > 0.1 && c[0] < 0.3 && c[1] < 0.3 && c[2] < 0.3) {
-                layer.backgroundColor = UIColor.clearColor.CGColor;
-            }
-        }
-        
         for (CALayer *sublayer in [layer.sublayers copy]) {
             diClearAllBlackLayersRecursive(sublayer, depth + 1, hiddenCount, clearedCount);
         }
     } @catch (__unused NSException *e) {}
 }
 
-// 递归隐藏背景视图
 static void diHideBackgroundViewsRecursive(UIView *view, NSInteger depth) {
     if (!view || depth > 20) return;
     @try {
@@ -119,7 +107,8 @@ static void diHideBackgroundViewsRecursive(UIView *view, NSInteger depth) {
         if ([className rangeOfString:@"LumaTrackingBackdrop" options:NSCaseInsensitiveSearch].location != NSNotFound ||
             [className rangeOfString:@"AdaptiveKeyLineBackdrop" options:NSCaseInsensitiveSearch].location != NSNotFound ||
             [className rangeOfString:@"MTMaterialView" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-            [className rangeOfString:@"MaterialView" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+            [className rangeOfString:@"MaterialView" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+            [className rangeOfString:@"SystemBackground" options:NSCaseInsensitiveSearch].location != NSNotFound) {
             diLog(@"Hiding background view: %@ frame=%@", className, NSStringFromCGRect(view.frame));
             view.hidden = YES;
             view.alpha = 0.0;
@@ -149,7 +138,7 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
         if (!root || !root.window || !lgHostEnabled(@"DynamicIsland")) return;
         if (root.subviews.count == 0) return;
         
-        // 第一步：隐藏背景视图
+        // 第一步：隐藏背景视图（包括 _UISystemBackgroundView 和 MTMaterialView）
         diHideBackgroundViewsRecursive(root, 0);
         
         // 第二步：直接用 root.bounds 作为灵动岛区域的 frame（最准确，不会有坐标系偏移）
@@ -187,7 +176,6 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
         
         // 同步玻璃层的 frame 和 cornerRadius
         glass.frame = glassFrame;
-        // 优先用 root.layer 的 cornerRadius，没有的话用高度的一半
         CGFloat radius = root.layer.cornerRadius;
         if (radius <= 0) radius = CGRectGetHeight(glassFrame) * 0.5;
         glass.layer.cornerRadius = radius;

@@ -1,5 +1,5 @@
-// DIContentClear - 灵动岛内容进程黑色背景清除（参考 Liquidify 实现方式）
-// 主 tweak 加载到灵动岛内容进程后，用进程名判断，只在相关进程里执行清除
+// DIContentClear - 灵动岛内容进程黑色背景清除（参考 Liquidify 实现）
+// 关键：hook _UISystemBackgroundView 和 MTMaterialView，这两个才是灵动岛黑色背景的真正来源
 
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -32,83 +32,6 @@ static void diContentLog(NSString *format, ...) {
     } @catch (__unused NSException *e) {}
 }
 
-#pragma mark - 工具函数
-
-static BOOL diContentColorIsBlack(CGColorRef color) {
-    if (!color) return NO;
-    size_t n = CGColorGetNumberOfComponents(color);
-    const CGFloat *c = CGColorGetComponents(color);
-    if (!c) return NO;
-    CGFloat r=0,g=0,b=0,a=0;
-    if (n >= 4) { r=c[0]; g=c[1]; b=c[2]; a=c[3]; }
-    else if (n == 2) { r=g=b=c[0]; a=c[1]; }
-    return a > 0.05 && r < 0.25 && g < 0.25 && b < 0.25;
-}
-
-static void diContentClearBlackBackgroundsRecursive(UIView *view, NSInteger depth, NSInteger *count) {
-    if (!view || depth > 40) return;
-    @try {
-        if (view.backgroundColor && diContentColorIsBlack(view.backgroundColor.CGColor)) {
-            view.backgroundColor = UIColor.clearColor;
-            if (count) (*count)++;
-        }
-        if (view.layer.backgroundColor && diContentColorIsBlack(view.layer.backgroundColor)) {
-            view.layer.backgroundColor = UIColor.clearColor.CGColor;
-            if (count) (*count)++;
-        }
-        // 对纯背景视图直接隐藏
-        if (view.subviews.count == 0 && !view.layer.contents &&
-            view.backgroundColor && diContentColorIsBlack(view.backgroundColor.CGColor)) {
-            view.hidden = YES;
-            view.alpha = 0.0;
-            if (count) (*count)++;
-        }
-        for (UIView *subview in [view.subviews copy]) {
-            diContentClearBlackBackgroundsRecursive(subview, depth + 1, count);
-        }
-    } @catch (__unused NSException *e) {}
-}
-
-static void diContentClearBlackLayersRecursive(CALayer *layer, NSInteger depth, NSInteger *count) {
-    if (!layer || depth > 50) return;
-    @try {
-        NSString *className = NSStringFromClass([layer class]);
-        // 跳过内容层
-        BOOL isContentLayer = [className isEqualToString:@"CALayerHost"] ||
-                               [className isEqualToString:@"CAPortalLayer"] ||
-                               [className isEqualToString:@"CAGainMapLayer"] ||
-                               [className isEqualToString:@"CATextLayer"];
-        if (!isContentLayer && layer.backgroundColor && diContentColorIsBlack(layer.backgroundColor)) {
-            layer.backgroundColor = UIColor.clearColor.CGColor;
-            if (count) (*count)++;
-        }
-        // 对纯背景层直接隐藏
-        if (!isContentLayer && layer.sublayers.count == 0 && !layer.contents &&
-            layer.backgroundColor && diContentColorIsBlack(layer.backgroundColor)) {
-            layer.hidden = YES;
-            layer.opacity = 0.0;
-            if (count) (*count)++;
-        }
-        for (CALayer *sublayer in [layer.sublayers copy]) {
-            diContentClearBlackLayersRecursive(sublayer, depth + 1, count);
-        }
-    } @catch (__unused NSException *e) {}
-}
-
-static void diContentClearAllBlackBackgrounds(void) {
-    if (!gIsDIContentProcess) return;
-    @try {
-        NSInteger count = 0;
-        for (UIWindow *window in [UIApplication sharedApplication].windows) {
-            diContentClearBlackBackgroundsRecursive(window, 0, &count);
-            diContentClearBlackLayersRecursive(window.layer, 0, &count);
-        }
-        if (count > 0) {
-            diContentLog(@"Cleared %ld black backgrounds", (long)count);
-        }
-    } @catch (__unused NSException *e) {}
-}
-
 #pragma mark - 判断是否是灵动岛相关进程
 
 static BOOL diContentIsDynamicIslandProcess(void) {
@@ -125,59 +48,152 @@ static BOOL diContentIsDynamicIslandProcess(void) {
     return NO;
 }
 
-#pragma mark - Hooks（只在灵动岛进程里生效）
+#pragma mark - 清除黑色背景的通用函数
 
-%hook UIView
-- (void)setBackgroundColor:(UIColor *)color {
-    if (gIsDIContentProcess && color && diContentColorIsBlack(color.CGColor)) {
-        %orig(UIColor.clearColor);
-        return;
-    }
-    %orig(color);
+static void diContentClearView(UIView *view) {
+    if (!gIsDIContentProcess || !view) return;
+    @try {
+        NSString *className = NSStringFromClass([view class]);
+        diContentLog(@"Clearing background for view: %@ frame=%@ bg=%@",
+                     className, NSStringFromCGRect(view.frame), view.backgroundColor);
+        
+        // 清除背景色
+        view.backgroundColor = UIColor.clearColor;
+        view.alpha = 0.0;
+        view.hidden = YES;
+        
+        // 清除 layer 背景色
+        view.layer.backgroundColor = UIColor.clearColor.CGColor;
+        view.layer.opacity = 0.0;
+        view.layer.hidden = YES;
+    } @catch (__unused NSException *e) {}
 }
+
+#pragma mark - hook _UISystemBackgroundView（关键！这是灵动岛黑色背景的主要来源）
+
+%hook _UISystemBackgroundView
+
 - (void)didMoveToWindow {
     %orig;
     if (gIsDIContentProcess && self.window) {
-        diContentClearAllBlackBackgrounds();
+        diContentLog(@"_UISystemBackgroundView didMoveToWindow, clearing...");
+        diContentClearView(self);
     }
 }
+
 - (void)layoutSubviews {
     %orig;
     if (gIsDIContentProcess) {
-        diContentClearAllBlackBackgrounds();
+        diContentClearView(self);
     }
 }
-%end
 
-%hook CALayer
-- (void)setBackgroundColor:(CGColorRef)color {
-    if (gIsDIContentProcess && color && diContentColorIsBlack(color)) {
-        %orig(UIColor.clearColor.CGColor);
+- (void)setBackgroundColor:(UIColor *)color {
+    if (gIsDIContentProcess) {
+        diContentLog(@"_UISystemBackgroundView setBackgroundColor intercepted: %@", color);
+        %orig(UIColor.clearColor);
+        self.alpha = 0.0;
+        self.hidden = YES;
         return;
     }
     %orig(color);
 }
+
 %end
 
-%hook UIViewController
-- (void)viewDidLoad {
+#pragma mark - hook MTMaterialView（关键！这也是灵动岛黑色背景的来源）
+
+%hook MTMaterialView
+
+- (void)didMoveToWindow {
     %orig;
-    if (gIsDIContentProcess) {
-        diContentLog(@"viewDidLoad: %@", NSStringFromClass([self class]));
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            diContentClearAllBlackBackgrounds();
-        });
+    if (gIsDIContentProcess && self.window) {
+        diContentLog(@"MTMaterialView didMoveToWindow, clearing...");
+        diContentClearView(self);
     }
 }
-- (void)viewDidLayoutSubviews {
+
+- (void)layoutSubviews {
     %orig;
     if (gIsDIContentProcess) {
-        diContentClearAllBlackBackgrounds();
+        diContentClearView(self);
     }
 }
+
+- (void)setBackgroundColor:(UIColor *)color {
+    if (gIsDIContentProcess) {
+        diContentLog(@"MTMaterialView setBackgroundColor intercepted: %@", color);
+        %orig(UIColor.clearColor);
+        self.alpha = 0.0;
+        self.hidden = YES;
+        return;
+    }
+    %orig(color);
+}
+
 %end
 
-// 初始化
+#pragma mark - hook 普通 UIView（兜底）
+
+%hook UIView
+
+- (void)setBackgroundColor:(UIColor *)color {
+    if (gIsDIContentProcess && color) {
+        CGColorRef cgColor = color.CGColor;
+        if (cgColor) {
+            size_t n = CGColorGetNumberOfComponents(cgColor);
+            const CGFloat *c = CGColorGetComponents(cgColor);
+            if (c && n >= 4 && c[3] > 0.05 && c[0] < 0.25 && c[1] < 0.25 && c[2] < 0.25) {
+                NSString *className = NSStringFromClass([self class]);
+                diContentLog(@"UIView setBackgroundColor intercepted (black): %@ color=%@", className, color);
+                %orig(UIColor.clearColor);
+                return;
+            }
+        }
+    }
+    %orig(color);
+}
+
+- (void)didMoveToWindow {
+    %orig;
+    if (gIsDIContentProcess && self.window) {
+        NSString *className = NSStringFromClass([self class]);
+        // 对背景视图类直接清除
+        if ([className containsString:@"Background"] ||
+            [className containsString:@"Backdrop"] ||
+            [className containsString:@"Material"]) {
+            diContentLog(@"UIView didMoveToWindow (background class): %@", className);
+            diContentClearView(self);
+        }
+    }
+}
+
+%end
+
+#pragma mark - hook CALayer（兜底）
+
+%hook CALayer
+
+- (void)setBackgroundColor:(CGColorRef)color {
+    if (gIsDIContentProcess && color) {
+        size_t n = CGColorGetNumberOfComponents(color);
+        const CGFloat *c = CGColorGetComponents(color);
+        if (c && n >= 4 && c[3] > 0.05 && c[0] < 0.25 && c[1] < 0.25 && c[2] < 0.25) {
+            NSString *className = NSStringFromClass([self class]);
+            diContentLog(@"CALayer setBackgroundColor intercepted (black): %@", className);
+            %orig(UIColor.clearColor.CGColor);
+            self.opacity = 0.0;
+            self.hidden = YES;
+            return;
+        }
+    }
+    %orig(color);
+}
+
+%end
+
+#pragma mark - 初始化
+
 %ctor {
     NSString *processName = [[NSProcessInfo processInfo] processName];
     diContentLog(@"=== DIContentClear loaded ===");
@@ -193,13 +209,39 @@ static BOOL diContentIsDynamicIslandProcess(void) {
     }
     
     diContentLog(@"DI content process detected, enabling black background clearing");
+    diContentLog(@"Hooking _UISystemBackgroundView and MTMaterialView...");
     
+    // 延迟清除一次
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        diContentClearAllBlackBackgrounds();
+        @try {
+            for (UIWindow *window in [UIApplication sharedApplication].windows) {
+                for (UIView *view in [window.subviews copy]) {
+                    NSString *className = NSStringFromClass([view class]);
+                    if ([className containsString:@"Background"] ||
+                        [className containsString:@"Backdrop"] ||
+                        [className containsString:@"Material"]) {
+                        diContentLog(@"Initial clear: %@", className);
+                        diContentClearView(view);
+                    }
+                }
+            }
+        } @catch (__unused NSException *e) {}
     });
     
+    // 定时清除，防止系统恢复
     NSTimer *timer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer * _Nonnull t) {
-        diContentClearAllBlackBackgrounds();
+        @try {
+            for (UIWindow *window in [UIApplication sharedApplication].windows) {
+                for (UIView *view in [window.subviews copy]) {
+                    NSString *className = NSStringFromClass([view class]);
+                    if ([className containsString:@"Background"] ||
+                        [className containsString:@"Backdrop"] ||
+                        [className containsString:@"Material"]) {
+                        diContentClearView(view);
+                    }
+                }
+            }
+        } @catch (__unused NSException *e) {}
     }];
     [[NSRunLoop mainRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
 }
