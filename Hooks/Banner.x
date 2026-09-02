@@ -3,69 +3,43 @@
 #import "../Shared/LGGlassKit.h"
 #import <objc/runtime.h>
 
-#pragma mark - 通知横幅深灰色半透明磨砂玻璃效果（Mango风格）
+#pragma mark - 通知横幅完全透明液态玻璃效果（跟Dock栏一样）
 
-static void *kLGBannerDarkOverlayKey = &kLGBannerDarkOverlayKey;
+static void *kLGBannerTransparentKey = &kLGBannerTransparentKey;
 
-static void LGApplyBannerDarkFrostedEffect(UIView *material, BOOL isTopBanner) {
+static void LGApplyBannerTransparentLiquidEffect(UIView *material, BOOL isTopBanner) {
     @try {
         if (!material || !material.superview) return;
         
         // 只对顶部横幅（Banner）应用效果，通知中心的通知保持原样
         if (!isTopBanner) return;
         
-        UIView *parent = material.superview;
+        // 完全透明，不添加任何叠加层，让液态玻璃效果直接显示出来（跟Dock栏一样）
         
-        // 查找或创建深灰色半透明叠加层
-        UIView *darkOverlay = objc_getAssociatedObject(material, kLGBannerDarkOverlayKey);
-        if (!darkOverlay) {
-            darkOverlay = [[UIView alloc] initWithFrame:material.bounds];
-            darkOverlay.userInteractionEnabled = NO;
-            darkOverlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-            objc_setAssociatedObject(material, kLGBannerDarkOverlayKey, darkOverlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        }
-        
-        // 深灰色半透明背景（更透明，参考用户效果）
-        // alpha 0.35 可以更清楚地看到后面的内容
-        CGFloat alpha = 0.35;
-        @try {
-            id alphaValue = LGGlassPreferenceValue(@"Banner.DarkOverlay.Alpha");
-            if (alphaValue && [alphaValue respondsToSelector:@selector(floatValue)]) {
-                alpha = [alphaValue floatValue];
-            }
-        } @catch (__unused NSException *e) {}
-        
-        darkOverlay.backgroundColor = [UIColor colorWithWhite:0.08 alpha:alpha];
-        darkOverlay.frame = material.bounds;
-        darkOverlay.layer.cornerRadius = material.layer.cornerRadius > 0 ? material.layer.cornerRadius : 22.0;
-        darkOverlay.layer.cornerCurve = kCACornerCurveContinuous;
-        darkOverlay.layer.masksToBounds = YES;
-        // 添加白色边框（参考用户效果）
-        darkOverlay.layer.borderWidth = 1.0;
-        darkOverlay.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.25].CGColor;
-        
-        // 把叠加层放在液态玻璃上面，内容下面
-        if (darkOverlay.superview != parent) {
-            [parent insertSubview:darkOverlay aboveSubview:material];
-        }
-        
-        // 确保原始 MTMaterialView 是透明的，让液态玻璃显示出来
+        // 确保原始 MTMaterialView 是完全透明的
         material.backgroundColor = [UIColor clearColor];
+        material.opaque = NO;
         if (material.layer.backgroundColor) {
             material.layer.backgroundColor = [UIColor clearColor].CGColor;
         }
         
-        // 遍历子视图，清除不透明的背景
+        // 遍历子视图，清除所有不透明的背景
         for (UIView *sub in [material.subviews copy]) {
+            sub.backgroundColor = [UIColor clearColor];
+            sub.opaque = NO;
+            if (sub.layer.backgroundColor) {
+                sub.layer.backgroundColor = [UIColor clearColor].CGColor;
+            }
+            // 如果是 UIVisualEffectView，关闭 effect
             if ([sub isKindOfClass:[UIVisualEffectView class]]) {
                 UIVisualEffectView *ev = (UIVisualEffectView *)sub;
                 ev.effect = nil;
             }
         }
         
-        NSLog(@"[SBLiquidGlass-Banner] Dark frosted effect applied (alpha=%.2f)", alpha);
+        NSLog(@"[SBLiquidGlass-Banner] Transparent liquid effect applied (same as Dock)");
     } @catch (NSException *e) {
-        NSLog(@"[SBLiquidGlass-Banner] Dark frosted exception: %@", e);
+        NSLog(@"[SBLiquidGlass-Banner] Transparent liquid exception: %@", e);
     }
 }
 
@@ -231,9 +205,9 @@ static void LGUpdatePlatterGlass(UIView *material) {
         if ([prefix isEqualToString:@"Notification"]) {
             LGUpdateNotificationAdaptiveOverlay(material);
         }
-        // 顶部横幅应用深灰色半透明磨砂玻璃效果（Mango风格）
+        // 顶部横幅应用完全透明液态玻璃效果（跟Dock栏一样）
         if ([prefix isEqualToString:@"Banner"]) {
-            LGApplyBannerDarkFrostedEffect(material, topBanner);
+            LGApplyBannerTransparentLiquidEffect(material, topBanner);
         }
     } else if (LGIsPlatterActionMaterial(material)) {
 
