@@ -1,76 +1,241 @@
-// Dynamic Island Test21 - 最简单的窗口半透明测试
-// 只做一件事：让灵动岛窗口半透明，不加液态玻璃，先确认半透明能不能生效
+// Native Dynamic Island - Background Driver integration (Test22)
+// IMPORTANT: only replace Hooks/DynamicIsland.x
+//
+// This version stops changing SBSystemApertureWindow.alpha and stops trying to
+// erase arbitrary black UIView/CALayer nodes.  The native Dynamic Island uses
+// a dedicated CCSystemApertureBackgroundDriver.  We replace the driver's
+// backgroundView with our existing LGLiveBackdropView so the glass lives at
+// the same background-driver level as the native aperture background.
 
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
+#import <objc/runtime.h>
+#import <objc/message.h>
 #import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGGlassKit.h"
-#import <objc/runtime.h>
 
 @interface SBSystemApertureContainerView : UIView
 @end
 
-static NSString *kDILogPath = @"/var/mobile/Documents/di_native_log.txt";
+@interface SBSystemApertureWindow : UIWindow
+@end
 
-#pragma mark - 日志工具
+@interface CCSystemApertureBackgroundDriver : NSObject
+- (instancetype)initWithContainerView:(UIView *)containerView;
+- (UIView *)containerView;
+- (void)setContainerView:(UIView *)containerView;
+- (UIView *)backgroundView;
+- (void)setBackgroundView:(UIView *)backgroundView;
+- (UIView *)clipHostView;
+- (void)setClipHostView:(UIView *)clipHostView;
+@end
 
-static void diLog(NSString *format, ...) {
+static const void *kLGDIBackgroundGlassKey = &kLGDIBackgroundGlassKey;
+static const void *kLGDIOwnedNativeBackgroundKey = &kLGDIOwnedNativeBackgroundKey;
+
+static BOOL LGDIEnabled(void) {
     @try {
-        va_list args;
-        va_start(args, format);
-        NSString *msg = [[NSString alloc] initWithFormat:format arguments:args];
-        va_end(args);
-        NSLog(@"[DI-Test] %@", msg);
-        NSString *logLine = [NSString stringWithFormat:@"[%@] %@\n", [NSDate date], msg];
-        NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:kDILogPath];
-        if (!fh) {
-            [[NSFileManager defaultManager] createFileAtPath:kDILogPath contents:nil attributes:nil];
-            fh = [NSFileHandle fileHandleForWritingAtPath:kDILogPath];
+        return lgHostEnabled(@"DynamicIsland");
+    } @catch (__unused NSException *e) {
+        return NO;
+    }
+}
+
+static NSString *LGDIFilterType(void) {
+    NSString *type = nil;
+    @try {
+        type = LGFilterTypeForHostPrefix(@"DynamicIsland");
+    } @catch (__unused NSException *e) {}
+    return type.length ? type : @"dylv.liquidglass.dynamicisland";
+}
+
+static BOOL LGDIIsNativeApertureView(UIView *view) {
+    for (UIView *v = view; v; v = v.superview) {
+        if ([NSStringFromClass(v.class) isEqualToString:@"SBSystemApertureContainerView"])
+            return YES;
+    }
+    return NO;
+}
+
+static void LGDISyncGlass(UIView *host, UIView *glass) {
+    if (!host || !glass) return;
+    CGRect bounds = host.bounds;
+    if (CGRectIsEmpty(bounds)) return;
+
+    glass.frame = bounds;
+    glass.autoresizingMask = UIViewAutoresizingFlexibleWidth |
+                             UIViewAutoresizingFlexibleHeight;
+    glass.backgroundColor = UIColor.clearColor;
+    glass.alpha = 1.0;
+    glass.hidden = NO;
+    glass.userInteractionEnabled = NO;
+
+    CGFloat radius = host.layer.cornerRadius;
+    if (radius <= 0.0) {
+        radius = MIN(CGRectGetWidth(bounds), CGRectGetHeight(bounds)) * 0.5;
+    }
+    glass.layer.cornerRadius = radius;
+    glass.layer.cornerCurve = kCACornerCurveContinuous;
+    glass.layer.masksToBounds = YES;
+}
+
+static LGLiveBackdropView *LGDIEnsureGlass(CCSystemApertureBackgroundDriver *driver,
+                                            UIView *nativeBackground) {
+    if (!driver || !LGDIEnabled()) return nil;
+
+    UIView *container = driver.containerView;
+    if (!container) return nil;
+    if (!LGDIIsNativeApertureView(container)) return nil;
+
+    LGLiveBackdropView *glass = objc_getAssociatedObject(driver, kLGDIBackgroundGlassKey);
+    if (!glass) {
+        NSString *filterType = LGDIFilterType();
+        glass = [[LGLiveBackdropView alloc] initWithFrame:container.bounds
+                                                 groupName:nil
+                                                filterType:filterType];
+        glass.backgroundColor = UIColor.clearColor;
+        glass.userInteractionEnabled = NO;
+        glass.layer.zPosition = -100.0;
+
+        // Keep the original native background alive but out of the visual
+        // stack.  Do not destroy it: the driver may expect the same object.
+        if (nativeBackground && nativeBackground != glass) {
+            objc_setAssociatedObject(driver, kLGDIOwnedNativeBackgroundKey,
+                                     nativeBackground, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            @try {
+                nativeBackground.hidden = YES;
+                nativeBackground.alpha = 0.0;
+            } @catch (__unused NSException *e) {}
         }
-        if (fh) {
-            [fh seekToEndOfFile];
-            [fh writeData:[logLine dataUsingEncoding:NSUTF8StringEncoding]];
-            [fh closeFile];
+
+        objc_setAssociatedObject(driver, kLGDIBackgroundGlassKey,
+                                 glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+        @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
+        NSLog(@"[SBLiquidGlass-DI-Test22] installed driver glass filter=%@ container=%@ background=%@",
+              filterType, NSStringFromClass(container.class),
+              nativeBackground ? NSStringFromClass(nativeBackground.class) : @"<nil>");
+    }
+
+    if (glass.superview != container) {
+        [glass removeFromSuperview];
+        [container insertSubview:glass atIndex:0];
+    }
+
+    LGDISyncGlass(container, glass);
+    return glass;
+}
+
+static void LGDIRestore(CCSystemApertureBackgroundDriver *driver) {
+    if (!driver) return;
+    LGLiveBackdropView *glass = objc_getAssociatedObject(driver, kLGDIBackgroundGlassKey);
+    UIView *native = objc_getAssociatedObject(driver, kLGDIOwnedNativeBackgroundKey);
+
+    if (glass) [glass removeFromSuperview];
+    @try {
+        if (native) {
+            native.hidden = NO;
+            native.alpha = 1.0;
         }
+    } @catch (__unused NSException *e) {}
+
+    objc_setAssociatedObject(driver, kLGDIBackgroundGlassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(driver, kLGDIOwnedNativeBackgroundKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+#pragma mark - The actual native aperture background hook
+
+%hook CCSystemApertureBackgroundDriver
+
+- (instancetype)initWithContainerView:(UIView *)containerView {
+    self = %orig(containerView);
+    if (self && LGDIEnabled()) {
+        @try {
+            UIView *background = self.backgroundView;
+            LGDIEnsureGlass(self, background);
+        } @catch (NSException *e) {
+            NSLog(@"[SBLiquidGlass-DI-Test22] init exception: %@", e);
+        }
+    }
+    return self;
+}
+
+- (void)setBackgroundView:(UIView *)backgroundView {
+    // Let the system establish its own object first.  Then install our glass
+    // in the driver's container.  We intentionally keep the native object
+    // because the driver may rely on it internally.
+    %orig(backgroundView);
+
+    if (!LGDIEnabled()) {
+        LGDIRestore(self);
+        return;
+    }
+
+    @try {
+        LGDIEnsureGlass(self, backgroundView);
+    } @catch (NSException *e) {
+        NSLog(@"[SBLiquidGlass-DI-Test22] setBackgroundView exception: %@", e);
+    }
+}
+
+- (void)setContainerView:(UIView *)containerView {
+    %orig(containerView);
+    if (!LGDIEnabled()) {
+        LGDIRestore(self);
+        return;
+    }
+
+    @try {
+        LGDIEnsureGlass(self, self.backgroundView);
+    } @catch (NSException *e) {
+        NSLog(@"[SBLiquidGlass-DI-Test22] setContainerView exception: %@", e);
+    }
+}
+
+- (void)setClipHostView:(UIView *)clipHostView {
+    %orig(clipHostView);
+    if (!LGDIEnabled()) return;
+
+    @try {
+        LGDIEnsureGlass(self, self.backgroundView);
     } @catch (__unused NSException *e) {}
 }
 
-#pragma mark - Hooks
+%end
+
+#pragma mark - Keep the glass aligned with the native aperture
 
 %hook SBSystemApertureContainerView
 
 - (void)didMoveToWindow {
     %orig;
-    @try {
-        static dispatch_once_t onceToken;
-        dispatch_once(&onceToken, ^{
-            [[NSFileManager defaultManager] removeItemAtPath:kDILogPath error:nil];
-        });
-        
-        if (self.window && lgHostEnabled(@"DynamicIsland")) {
-            diLog(@"=== Test21: Window alpha test ===");
-            diLog(@"Before: window.alpha = %.2f", self.window.alpha);
-            
-            // 只做一件事：让窗口半透明
-            self.window.alpha = 0.5;
-            
-            diLog(@"After: window.alpha = %.2f", self.window.alpha);
-            diLog(@"root.frame = %@", NSStringFromCGRect(self.frame));
-            diLog(@"root.subviews.count = %lu", (unsigned long)self.subviews.count);
-        }
-    } @catch (NSException *e) {
-        diLog(@"EXCEPTION: %@", e);
-    }
+    if (!self.window || !LGDIEnabled()) return;
+
+    // No window.alpha manipulation here.  The native aperture window must
+    // remain fully opaque at the window-compositing level.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        @try {
+            // The driver owns the real background; this call only gives the
+            // driver a chance to re-run after the container has its final frame.
+            for (UIView *subview in [self.subviews copy]) {
+                if ([NSStringFromClass(subview.class) isEqualToString:@"LGLiveBackdropView"]) {
+                    LGDISyncGlass(self, subview);
+                }
+            }
+        } @catch (__unused NSException *e) {}
+    });
 }
 
 - (void)layoutSubviews {
     %orig;
-    @try {
-        if (self.window && lgHostEnabled(@"DynamicIsland")) {
-            // 每次 layout 都重新设置 alpha，防止被系统恢复
-            self.window.alpha = 0.5;
+    if (!self.window || !LGDIEnabled()) return;
+
+    for (UIView *subview in [self.subviews copy]) {
+        if ([NSStringFromClass(subview.class) isEqualToString:@"LGLiveBackdropView"]) {
+            LGDISyncGlass(self, subview);
         }
-    } @catch (__unused NSException *e) {}
+    }
 }
 
 %end
+
