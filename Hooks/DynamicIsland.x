@@ -1,110 +1,192 @@
+// Dynamic Island Native Test7 - 调试版
+// 目标：找到灵动岛真正的黑色背景层，并彻底清除它
+// 安装后控制台搜 DI-DUMP 查看完整层级结构，搜 DI-Native 看清除日志
+
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
 #import "../Shared/LGLiveBackdropView.h"
 #import "../Shared/LGGlassKit.h"
 #import <objc/runtime.h>
 
-// Native Dynamic Island Test6.
-// IMPORTANT: _SBSystemApertureContainerViewContentView has an internal
-// invariant about its child contentView. Never insert our own subview into it.
-// The previous Test3 violated that invariant and caused sbsa_onlyObjectOrNilAssert.
-
 @interface SBSystemApertureContainerView : UIView
 @end
 @interface _SBSystemApertureContainerViewContentView : UIView
 @end
-@interface SBFTouchPassThroughView : UIView
-@end
 
 static void *kDIGlassKey = &kDIGlassKey;
-static void *kDIContentKey = &kDIContentKey;
+static void *kDIDumpedKey = &kDIDumpedKey;
 
-static BOOL diIsNativeApertureView(UIView *view) {
-    for (UIView *p = view; p; p = p.superview) {
-        NSString *n = NSStringFromClass(p.class);
-        if ([n isEqualToString:@"SBSystemApertureContainerView"])
-            return YES;
+#pragma mark - 调试工具：递归打印视图和图层层级
+
+static void diDumpLayerTree(CALayer *layer, NSInteger depth, NSMutableString *output) {
+    if (!layer) return;
+    NSString *indent = [@"" stringByPaddingToLength:depth * 2 withString:@"  " startingAtIndex:0];
+    NSString *name = layer.name ?: @"(null)";
+    NSString *className = NSStringFromClass([layer class]);
+    CGRect frame = layer.frame;
+    CGRect bounds = layer.bounds;
+    CGFloat alpha = layer.opacity;
+    BOOL hidden = layer.hidden;
+    CGColorRef bgColor = layer.backgroundColor;
+    BOOL hasContents = layer.contents != nil;
+    BOOL hasFilters = layer.filters != nil && [layer.filters count] > 0;
+    BOOL hasCompositingFilter = layer.compositingFilter != nil;
+
+    NSString *bgDesc = @"";
+    if (bgColor) {
+        size_t n = CGColorGetNumberOfComponents(bgColor);
+        const CGFloat *c = CGColorGetComponents(bgColor);
+        if (n >= 4) {
+            bgDesc = [NSString stringWithFormat:@" bg=rgba(%.2f,%.2f,%.2f,%.2f)", c[0], c[1], c[2], c[3]];
+        } else if (n == 2) {
+            bgDesc = [NSString stringWithFormat:@" bg=gray(%.2f,%.2f)", c[0], c[1]];
+        }
     }
-    return NO;
+
+    [output appendFormat:@"%@LAYER %@ name=%@ frame=%.0f,%.0f,%.0fx%.0f bounds=%.0fx%.0f alpha=%.2f hidden=%d%@%@%@%@ cornerRadius=%.1f\n",
+        indent, className, name,
+        frame.origin.x, frame.origin.y, frame.size.width, frame.size.height,
+        bounds.size.width, bounds.size.height,
+        alpha, hidden,
+        bgDesc,
+        hasContents ? @" HAS_CONTENTS" : @"",
+        hasFilters ? @" HAS_FILTERS" : @"",
+        hasCompositingFilter ? @" HAS_COMPOSITING_FILTER" : @"",
+        layer.cornerRadius];
+
+    for (CALayer *sublayer in [layer.sublayers copy]) {
+        diDumpLayerTree(sublayer, depth + 1, output);
+    }
 }
 
-static void diClearBackgroundOnly(UIView *view) {
+static void diDumpViewTree(UIView *view, NSInteger depth, NSMutableString *output) {
     if (!view) return;
+    NSString *indent = [@"" stringByPaddingToLength:depth * 2 withString:@"  " startingAtIndex:0];
+    NSString *className = NSStringFromClass([view class]);
+    CGRect frame = view.frame;
+    CGFloat alpha = view.alpha;
+    BOOL hidden = view.hidden;
+    UIColor *bgColor = view.backgroundColor;
+    NSString *bgDesc = @"";
+    if (bgColor) {
+        bgDesc = [NSString stringWithFormat:@" bg=%@", bgColor];
+    }
+
+    [output appendFormat:@"%@VIEW %@ frame=%.0f,%.0f,%.0fx%.0f alpha=%.2f hidden=%d%@ clipsToBounds=%d\n",
+        indent, className,
+        frame.origin.x, frame.origin.y, frame.size.width, frame.size.height,
+        alpha, hidden, bgDesc, view.clipsToBounds];
+
+    // 打印这个 view 的 layer 树
+    diDumpLayerTree(view.layer, depth + 1, output);
+
+    for (UIView *subview in [view.subviews copy]) {
+        diDumpViewTree(subview, depth + 1, output);
+    }
+}
+
+static void diDumpApertureTree(UIView *root) {
+    if (!root) return;
+    // 只 dump 一次，避免刷屏
+    NSNumber *dumped = objc_getAssociatedObject(root, kDIDumpedKey);
+    if (dumped && [dumped boolValue]) return;
+    objc_setAssociatedObject(root, kDIDumpedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    NSMutableString *output = [NSMutableString stringWithString:@"\n========== DI-DUMP: Dynamic Island View/Layer Tree ==========\n"];
+    diDumpViewTree(root, 0, output);
+    [output appendString:@"==============================================================\n"];
+    NSLog(@"%@", output);
+}
+
+#pragma mark - 激进的背景清除：递归遍历所有层，隐藏全尺寸背景层
+
+static BOOL diLayerLooksLikeOpaqueBackground(CALayer *layer, CALayer *referenceLayer) {
+    if (!layer || !referenceLayer) return NO;
+    CGRect refBounds = referenceLayer.bounds;
+    if (CGRectIsEmpty(refBounds)) return NO;
+
+    CGRect layerBounds = layer.bounds;
+    CGFloat refW = CGRectGetWidth(refBounds);
+    CGFloat refH = CGRectGetHeight(refBounds);
+    if (refW < 1 || refH < 1) return NO;
+
+    // 尺寸接近参考层（覆盖大部分面积）
+    CGFloat ratioW = CGRectGetWidth(layerBounds) / refW;
+    CGFloat ratioH = CGRectGetHeight(layerBounds) / refH;
+    BOOL coversMost = (ratioW > 0.75 && ratioH > 0.6);
+
+    // 有不透明背景色
+    BOOL hasOpaqueBg = NO;
+    CGColorRef bg = layer.backgroundColor;
+    if (bg) {
+        size_t n = CGColorGetNumberOfComponents(bg);
+        const CGFloat *c = CGColorGetComponents(bg);
+        if (n >= 4 && c[3] > 0.5) {
+            hasOpaqueBg = YES;
+        } else if (n == 2 && c[1] > 0.5) {
+            hasOpaqueBg = YES;
+        }
+    }
+
+    // 有 contents（预渲染的黑色图片）
+    BOOL hasOpaqueContents = layer.contents != nil;
+
+    // 是 CABackdropLayer 或其他私有背景层
+    NSString *className = NSStringFromClass([layer class]);
+    BOOL isBackdropClass = [className rangeOfString:@"Backdrop" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                            [className rangeOfString:@"Material" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                            [className rangeOfString:@"Background" options:NSCaseInsensitiveSearch].location != NSNotFound;
+
+    return coversMost && (hasOpaqueBg || hasOpaqueContents || isBackdropClass);
+}
+
+static void diHideBackgroundLayersRecursive(CALayer *layer, CALayer *referenceLayer, NSInteger depth) {
+    if (!layer || !referenceLayer || depth > 20) return;
     @try {
-        view.backgroundColor = UIColor.clearColor;
-        view.layer.backgroundColor = UIColor.clearColor.CGColor;
-        view.opaque = NO;
+        if (diLayerLooksLikeOpaqueBackground(layer, referenceLayer)) {
+            NSLog(@"[DI-Native] Hiding background layer: %@ name=%@ bounds=%@",
+                  NSStringFromClass([layer class]), layer.name ?: @"(null)",
+                  NSStringFromCGRect(layer.bounds));
+            layer.hidden = YES;
+            layer.opacity = 0.0;
+        }
+        // 同时清除背景色和 contents
+        if (layer.backgroundColor) {
+            layer.backgroundColor = UIColor.clearColor.CGColor;
+        }
+        for (CALayer *sublayer in [layer.sublayers copy]) {
+            diHideBackgroundLayersRecursive(sublayer, referenceLayer, depth + 1);
+        }
     } @catch (__unused NSException *e) {}
 }
 
-
-static BOOL diCoversBounds(CALayer *layer, CALayer *owner) {
-    if (!layer || !owner) return NO;
-    CGRect b = owner.bounds;
-    CGRect f = layer.frame;
-    if (CGRectIsEmpty(b) || CGRectIsEmpty(f)) return NO;
-    CGFloat t = 2.0;
-    return fabs(CGRectGetMinX(f)) <= t &&
-           fabs(CGRectGetMinY(f)) <= t &&
-           fabs(CGRectGetWidth(f) - CGRectGetWidth(b)) <= t &&
-           fabs(CGRectGetHeight(f) - CGRectGetHeight(b)) <= t;
-}
-
-static void diStripRenderedBackgroundLayerContents(UIView *view) {
+static void diClearAllBackgroundsInView(UIView *view) {
     if (!view) return;
+    @try {
+        // 清除 view 自身背景
+        view.backgroundColor = UIColor.clearColor;
+        view.layer.backgroundColor = UIColor.clearColor.CGColor;
+        view.opaque = NO;
 
-    CALayer *owner = view.layer;
-    for (CALayer *layer in [owner.sublayers copy]) {
-        if (!diCoversBounds(layer, owner))
-            continue;
+        // 递归隐藏所有背景层
+        diHideBackgroundLayersRecursive(view.layer, view.layer, 0);
 
-        // Test6: the black surface may be a pre-rendered layer contents rather
-        // than backgroundColor/material. Remove only the contents of a
-        // full-size candidate, leaving the layer itself in place.
-        @try {
-            if (layer.contents) {
-                layer.contents = nil;
-            }
-
-            // A private CA compositing/filter object can also paint an opaque
-            // material. Clear only these properties on the full-size candidate.
-            if (layer.compositingFilter)
-                layer.compositingFilter = nil;
-            if (layer.filters)
-                layer.filters = nil;
-        } @catch (__unused NSException *e) {}
-    }
+        // 递归处理子视图
+        for (UIView *subview in [view.subviews copy]) {
+            diClearAllBackgroundsInView(subview);
+        }
+    } @catch (__unused NSException *e) {}
 }
 
-static void diClearKnownNativeBackgrounds(UIView *view) {
-    if (!view) return;
-    NSString *n = NSStringFromClass(view.class);
+#pragma mark - 液态玻璃应用
 
-    // Do NOT recursively modify arbitrary Apple subviews. Only target known
-    // material/platter/background classes, because Apple's content hierarchy
-    // has strict child-count/layout assumptions.
-    if ([n rangeOfString:@"Background" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-        [n rangeOfString:@"Backdrop" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-        [n rangeOfString:@"Material" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-        [n rangeOfString:@"Platter" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-        diClearBackgroundOnly(view);
-    }
-
-    for (UIView *sub in [view.subviews copy]) {
-        diClearKnownNativeBackgrounds(sub);
-    }
-}
-
-static void diSyncGlassToContent(UIView *container, UIView *content, LGLiveBackdropView *glass) {
-    if (!container || !content || !glass) return;
-
-    // Glass is a SIBLING of Apple's special content view, never its child.
-    glass.frame = content.frame;
+static void diSyncGlassToContent(UIView *content, LGLiveBackdropView *glass) {
+    if (!content || !glass) return;
+    glass.frame = content.bounds;
     glass.autoresizingMask = UIViewAutoresizingFlexibleWidth |
                              UIViewAutoresizingFlexibleHeight;
     glass.backgroundColor = UIColor.clearColor;
     glass.alpha = 1.0;
-
     CGFloat radius = content.layer.cornerRadius;
     if (radius <= 0.0)
         radius = MIN(CGRectGetWidth(content.bounds), CGRectGetHeight(content.bounds)) * 0.5;
@@ -118,6 +200,10 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
         if (!root || !root.window || !lgHostEnabled(@"DynamicIsland")) return;
         if (root.subviews.count == 0) return;
 
+        // 第一步：dump 完整层级结构（只 dump 一次）
+        diDumpApertureTree(root);
+
+        // 找到 content view
         UIView *content = nil;
         for (UIView *sub in [root.subviews copy]) {
             if ([NSStringFromClass(sub.class) isEqualToString:@"_SBSystemApertureContainerViewContentView"]) {
@@ -125,52 +211,56 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
                 break;
             }
         }
+        if (!content) {
+            // 如果没找到特殊 content view，就用第一个子 view
+            content = root.subviews.firstObject;
+        }
         if (!content || CGRectIsEmpty(content.bounds)) return;
 
-        // First make the special content view's own layer transparent.
-        // This does not change its children or its bounds.
-        diClearBackgroundOnly(content);
-        diClearKnownNativeBackgrounds(content);
-        diStripRenderedBackgroundLayerContents(content);
+        // 第二步：激进清除所有背景（递归遍历所有视图和图层）
+        diClearAllBackgroundsInView(root);
+        diClearAllBackgroundsInView(content);
 
+        // 第三步：创建或获取玻璃层
         LGLiveBackdropView *glass = objc_getAssociatedObject(root, kDIGlassKey);
         if (!glass) {
             NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
             if (!filterType.length) filterType = @"dylv.liquidglass.dynamicisland";
-
-            glass = [[LGLiveBackdropView alloc] initWithFrame:content.frame
+            glass = [[LGLiveBackdropView alloc] initWithFrame:content.bounds
                                                      groupName:nil
                                                     filterType:filterType];
             glass.backgroundColor = UIColor.clearColor;
             glass.userInteractionEnabled = NO;
 
-            // SIBLING insertion: never touch _SBSystemApertureContainerViewContentView.subviews.
+            // 作为 sibling 插在 content view 下面（不往 content view 里插，避免崩溃）
             NSUInteger idx = [root.subviews indexOfObject:content];
             if (idx == NSNotFound) idx = 0;
             [root insertSubview:glass atIndex:idx];
 
             objc_setAssociatedObject(root, kDIGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            objc_setAssociatedObject(root, kDIContentKey, content, OBJC_ASSOCIATION_ASSIGN);
-
             @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
-            NSLog(@"[SBLiquidGlass-DI-NativeTest6] glass sibling attached root=%@ content=%@ filter=%@",
-                  NSStringFromClass(root.class), NSStringFromClass(content.class), filterType);
+            NSLog(@"[DI-Native] Glass attached to root=%@ content=%@",
+                  NSStringFromClass(root.class), NSStringFromClass(content.class));
         }
 
-        // Apple may reorder its content view during transitions; always put
-        // our glass immediately BELOW it so text/buttons remain untouched.
+        // 确保玻璃在 content 下面
         if (glass.superview != root) {
             [root insertSubview:glass atIndex:0];
         } else {
             NSUInteger contentIndex = [root.subviews indexOfObject:content];
-            if (contentIndex != NSNotFound && [root.subviews indexOfObject:glass] != contentIndex - 1) {
+            NSUInteger glassIndex = [root.subviews indexOfObject:glass];
+            if (contentIndex != NSNotFound && glassIndex != contentIndex) {
                 [root insertSubview:glass atIndex:contentIndex];
             }
         }
 
-        diSyncGlassToContent(root, content, glass);
+        diSyncGlassToContent(content, glass);
+
+        // 再清一次背景（系统可能在 layout 后重新设置）
+        diClearAllBackgroundsInView(content);
+
     } @catch (NSException *e) {
-        NSLog(@"[SBLiquidGlass-DI-NativeTest6] exception: %@", e);
+        NSLog(@"[DI-Native] Exception: %@", e);
     }
 }
 
@@ -179,72 +269,36 @@ static void diRemoveGlass(SBSystemApertureContainerView *root) {
         LGLiveBackdropView *glass = objc_getAssociatedObject(root, kDIGlassKey);
         if (glass) [glass removeFromSuperview];
         objc_setAssociatedObject(root, kDIGlassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(root, kDIContentKey, nil, OBJC_ASSOCIATION_ASSIGN);
+        objc_setAssociatedObject(root, kDIDumpedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     } @catch (__unused NSException *e) {}
 }
 
-%hook SBSystemApertureContainerView
+#pragma mark - Hooks
 
+%hook SBSystemApertureContainerView
 - (void)didMoveToWindow {
     %orig;
     if (self.window) diApplyGlassToRoot(self);
     else diRemoveGlass(self);
 }
-
 - (void)layoutSubviews {
     %orig;
     if (self.window) diApplyGlassToRoot(self);
 }
-
 %end
 
 %hook _SBSystemApertureContainerViewContentView
-
-- (void)didMoveToWindow {
-    %orig;
-    // Do not add/remove subviews here. This class has an internal contentView invariant.
-    if (self.window) {
-        diClearBackgroundOnly(self);
-        diClearKnownNativeBackgrounds(self);
-        diStripRenderedBackgroundLayerContents(self);
-    }
-}
-
 - (void)layoutSubviews {
     %orig;
     if (self.window) {
-        diClearBackgroundOnly(self);
-        diClearKnownNativeBackgrounds(self);
+        diClearAllBackgroundsInView(self);
     }
 }
-
 - (void)setBackgroundColor:(UIColor *)color {
-    // Safe: preserve Apple's setter and only replace the color value.
-    if (self.window && diIsNativeApertureView(self)) %orig(UIColor.clearColor);
-    else %orig(color);
-}
-
-%end
-
-%hook SBFTouchPassThroughView
-
-- (void)layoutSubviews {
-    %orig;
-    if (!diIsNativeApertureView(self)) return;
-
-    diStripRenderedBackgroundLayerContents(self);
-
-    // Only clear the known platter/background node; NEVER set alpha on the
-    // whole touch-pass-through hierarchy, since it may contain live content.
-    for (UIView *sub in [self.subviews copy]) {
-        NSString *n = NSStringFromClass(sub.class);
-        if ([n rangeOfString:@"Background" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-            [n rangeOfString:@"Backdrop" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-            [n rangeOfString:@"Platter" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-            [n rangeOfString:@"Material" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-            diClearBackgroundOnly(sub);
-        }
+    if (self.window) {
+        %orig(UIColor.clearColor);
+    } else {
+        %orig(color);
     }
 }
-
 %end
