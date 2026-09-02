@@ -1,6 +1,7 @@
-// SBLiquidGlass Test26
-// Native Dynamic Island: install the existing Liquid Glass engine as a
-// dedicated background layer, while leaving Apple's native content untouched.
+// SBLiquidGlass Test27
+// Fix Test26 crash: no dispatch_async from the Dynamic Island hook.
+// The glass is attached to the nearest broader Aperture ancestor so
+// expanded Dynamic Island states can cover both left and right sides.
 
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -12,68 +13,87 @@
 @interface SBSystemApertureContainerView : UIView
 @end
 
-static const void *kLGDynamicIslandGlassKey = &kLGDynamicIslandGlassKey;
+static const void *kLGDIGlassKey = &kLGDIGlassKey;
 
-static void LGDIInstallGlass(SBSystemApertureContainerView *container) {
+static UIView *LGDIFindGlassHost(SBSystemApertureContainerView *container) {
+    UIView *candidate = container;
+    UIView *best = container;
+
+    // Walk upward, preferring an Aperture-named ancestor that is wider
+    // than the current container. This is intended to catch the host
+    // that contains both sides of the expanded Dynamic Island.
+    for (NSInteger i = 0; i < 6 && candidate.superview; i++) {
+        candidate = candidate.superview;
+        NSString *name = NSStringFromClass(candidate.class);
+        if ([name rangeOfString:@"Aperture" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+            if (candidate.bounds.size.width >= container.bounds.size.width &&
+                candidate.bounds.size.height >= container.bounds.size.height) {
+                best = candidate;
+            }
+        }
+    }
+
+    return best;
+}
+
+static void LGDIUpdateGlass(SBSystemApertureContainerView *container) {
     if (!container.window || !lgHostEnabled(@"DynamicIsland")) return;
 
-    @try {
-        LGLiveBackdropView *glass =
-            objc_getAssociatedObject(container, kLGDynamicIslandGlassKey);
+    UIView *host = LGDIFindGlassHost(container);
+    if (!host) return;
 
-        if (!glass) {
-            NSString *filterType = LGFilterTypeForHostPrefix(@"dylv.liquidglass.dynamicisland");
+    LGLiveBackdropView *glass =
+        objc_getAssociatedObject(host, kLGDIGlassKey);
 
-            glass = [[LGLiveBackdropView alloc]
-                     initWithFrame:container.bounds
-                     groupName:@"dylv.liquidglass.dynamicisland"
-                     filterType:filterType];
+    if (!glass) {
+        NSString *filterType =
+            LGFilterTypeForHostPrefix(@"dylv.liquidglass.dynamicisland");
 
-            glass.userInteractionEnabled = NO;
-            glass.layer.cornerCurve = kCACornerCurveContinuous;
-            glass.layer.masksToBounds = YES;
+        glass = [[LGLiveBackdropView alloc]
+                 initWithFrame:host.bounds
+                 groupName:@"dylv.liquidglass.dynamicisland"
+                 filterType:filterType];
 
-            objc_setAssociatedObject(container,
-                                     kLGDynamicIslandGlassKey,
-                                     glass,
-                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        glass.userInteractionEnabled = NO;
+        glass.layer.cornerCurve = kCACornerCurveContinuous;
+        glass.layer.masksToBounds = YES;
 
-            // Put glass behind Apple's native Dynamic Island content.
-            [container insertSubview:glass atIndex:0];
-        }
+        // Native Dynamic Island content stays untouched above the glass.
+        [host insertSubview:glass atIndex:0];
 
-        glass.frame = container.bounds;
-
-        // Match the native aperture's current shape.
-        CGFloat radius = MIN(CGRectGetWidth(container.bounds),
-                             CGRectGetHeight(container.bounds)) * 0.5;
-        if (radius > 0.0) {
-            glass.layer.cornerRadius = radius;
-        }
-
-        // Only remove a background painted directly by the container itself.
-        // Do NOT hide/remove any native content subviews.
-        container.backgroundColor = UIColor.clearColor;
-        container.layer.backgroundColor = UIColor.clearColor.CGColor;
-
-        [glass applyFilters];
-    } @catch (NSException *e) {
-        NSLog(@"[SBLiquidGlass-DI-Test26] install exception: %@", e);
+        objc_setAssociatedObject(host,
+                                 kLGDIGlassKey,
+                                 glass,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
+
+    glass.frame = host.bounds;
+
+    // Dynamic Island's native aperture is pill-like in compact mode and
+    // becomes a larger rounded surface when expanded.
+    CGFloat radius = MIN(CGRectGetWidth(host.bounds),
+                         CGRectGetHeight(host.bounds)) * 0.5;
+    glass.layer.cornerRadius = MAX(0.0, radius);
+
+    glass.hidden = NO;
 }
 
 %hook SBSystemApertureContainerView
 
 - (void)didMoveToWindow {
     %orig;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        LGDIInstallGlass(self);
-    });
+    @try {
+        LGDIUpdateGlass(self);
+    } @catch (NSException *e) {
+        NSLog(@"[SBLiquidGlass-DI-Test27] didMove exception: %@", e);
+    }
 }
 
 - (void)layoutSubviews {
     %orig;
-    LGDIInstallGlass(self);
+    @try {
+        LGDIUpdateGlass(self);
+    } @catch (__unused NSException *e) {}
 }
 
 %end
