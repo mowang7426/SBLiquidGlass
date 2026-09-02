@@ -3,7 +3,7 @@ export ARCHS ?= arm64 arm64e
 SBLIQUIDGLASS_DEBUG ?= 0
 export SBLIQUIDGLASS_DEBUG
 
-INSTALL_TARGET_PROCESSES = backboardd SpringBoard
+INSTALL_TARGET_PROCESSES = backboardd SpringBoard MediaRemoteUI chronod ClockAngel InCallService WidgetRenderer_Default WidgetRenderer_CarPlay
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = sbliquidglass
