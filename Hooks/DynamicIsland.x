@@ -96,6 +96,13 @@ static void diDumpApertureTree(UIView *root) {
     diDumpViewTree(root, 0, output);
     [output appendString:@"==============================================================\n"];
     NSLog(@"%@", output);
+
+    // 同时写到文件里，方便用户用 Filza 查看（不需要 syslog）
+    @try {
+        NSString *filePath = @"/var/mobile/Documents/di_dump.txt";
+        [output writeToFile:filePath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        NSLog(@"[DI-Native] Dump written to %@", filePath);
+    } @catch (__unused NSException *e) {}
 }
 
 #pragma mark - 激进的背景清除：递归遍历所有层，隐藏全尺寸背景层
