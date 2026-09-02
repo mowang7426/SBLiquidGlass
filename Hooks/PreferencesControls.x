@@ -1020,7 +1020,12 @@ static void LGStartSettingsSegmentDisplayLink(UISegmentedControl *control) {
         !control.window) return;
     CADisplayLink *link = [CADisplayLink displayLinkWithTarget:control
         selector:@selector(lg_settingsSegmentTick:)];
-    link.preferredFramesPerSecond = UIScreen.mainScreen.maximumFramesPerSecond ?: 60;
+    // 性能优化：设置页滑动只需要 30 FPS，避免在 ProMotion 设备上以 120 FPS 持续驱动玻璃效果。
+    if (@available(iOS 15.0, *)) {
+        link.preferredFrameRateRange = CAFrameRateRangeMake(20.0, 30.0, 30.0);
+    } else {
+        link.preferredFramesPerSecond = 30;
+    }
     [link addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
     objc_setAssociatedObject(control, kLGSettingsSegmentDisplayLinkKey, link,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);

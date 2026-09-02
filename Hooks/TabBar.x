@@ -99,6 +99,13 @@ static inline CGFloat LGTabBarSpringStep(CGFloat current,
     self.lastDisplayTime = 0.0;
     self.displayLink = [CADisplayLink displayLinkWithTarget:self
                                                    selector:@selector(tick:)];
+    // TabBar 液态玻璃只在交互/形变期间需要连续刷新；限制到 60 FPS，
+    // 避免 ProMotion 设备 120 FPS 带来的额外 CPU/GPU/WindowServer 开销。
+    if (@available(iOS 15.0, *)) {
+        self.displayLink.preferredFrameRateRange = CAFrameRateRangeMake(30.0, 60.0, 60.0);
+    } else {
+        self.displayLink.preferredFramesPerSecond = 60;
+    }
     [self.displayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
 }
 
