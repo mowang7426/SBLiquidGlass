@@ -4,7 +4,7 @@
 #import "../Shared/LGGlassKit.h"
 #import <objc/runtime.h>
 
-// Native Dynamic Island Test2.
+// Native Dynamic Island Test3.
 // IMPORTANT: _SBSystemApertureContainerViewContentView has an internal
 // invariant about its child contentView. Never insert our own subview into it.
 // The previous Test3 violated that invariant and caused sbsa_onlyObjectOrNilAssert.
@@ -38,40 +38,47 @@ static void diClearBackgroundOnly(UIView *view) {
 }
 
 
-static BOOL diLayerLooksLikeFullBackground(CALayer *layer, UIView *owner) {
-    if (!layer || !owner) return NO;
-    CGRect b = owner.bounds;
-    CGRect f = layer.frame;
-    if (CGRectIsEmpty(f) || CGRectIsEmpty(b)) return NO;
+static void diNeutralizeNativeBackdropLayers(CALayer *layer) {
+    if (!layer) return;
 
-    CGFloat tol = 2.0;
-    BOOL covers = fabs(CGRectGetWidth(f) - CGRectGetWidth(b)) <= tol &&
-                  fabs(CGRectGetHeight(f) - CGRectGetHeight(b)) <= tol;
-    BOOL originOK = fabs(CGRectGetMinX(f)) <= tol &&
-                    fabs(CGRectGetMinY(f)) <= tol;
-    return covers && originOK;
+    NSString *cn = NSStringFromClass(layer.class);
+    BOOL backdropLike =
+        [cn rangeOfString:@"Backdrop" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+        [cn rangeOfString:@"VisualEffect" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+        [cn rangeOfString:@"Material" options:NSCaseInsensitiveSearch].location != NSNotFound;
+
+    if (backdropLike) {
+        @try {
+            // Diagnostic Test3: remove Apple's own material/filter from the
+            // background layer so our Liquid Glass sibling can become visible.
+            layer.filters = nil;
+            layer.compositingFilter = nil;
+            layer.backgroundColor = UIColor.clearColor.CGColor;
+            layer.opaque = NO;
+        } @catch (__unused NSException *e) {}
+    }
+
+    for (CALayer *sub in [layer.sublayers copy]) {
+        diNeutralizeNativeBackdropLayers(sub);
+    }
 }
 
-static void diClearOpaqueBackgroundSublayers(UIView *view) {
+static void diNeutralizeNativeBackdropViews(UIView *view) {
     if (!view) return;
 
-    CALayer *rootLayer = view.layer;
-    for (CALayer *layer in [rootLayer.sublayers copy]) {
-        if (!diLayerLooksLikeFullBackground(layer, view))
-            continue;
+    NSString *cn = NSStringFromClass(view.class);
+    BOOL backdropLike =
+        [cn rangeOfString:@"Backdrop" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+        [cn rangeOfString:@"VisualEffect" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+        [cn rangeOfString:@"Material" options:NSCaseInsensitiveSearch].location != NSNotFound;
 
-        // Only clear a layer that actually has a solid background. Do not
-        // remove it: keeping the layer preserves Apple's animation/layout.
-        CGColorRef bg = layer.backgroundColor;
-        if (bg) {
-            const CGFloat *c = CGColorGetComponents(bg);
-            size_t n = CGColorGetNumberOfComponents(bg);
-            CGFloat alpha = (n >= 4) ? c[3] : c[n - 1];
-            if (alpha > 0.5) {
-                layer.backgroundColor = UIColor.clearColor.CGColor;
-                layer.opaque = NO;
-            }
-        }
+    if (backdropLike) {
+        diClearBackgroundOnly(view);
+        diNeutralizeNativeBackdropLayers(view.layer);
+    }
+
+    for (UIView *sub in [view.subviews copy]) {
+        diNeutralizeNativeBackdropViews(sub);
     }
 }
 
@@ -130,7 +137,8 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
         // This does not change its children or its bounds.
         diClearBackgroundOnly(content);
         diClearKnownNativeBackgrounds(content);
-        diClearOpaqueBackgroundSublayers(content);
+        diNeutralizeNativeBackdropViews(root);
+        diNeutralizeNativeBackdropLayers(root.layer);
 
         LGLiveBackdropView *glass = objc_getAssociatedObject(root, kDIGlassKey);
         if (!glass) {
@@ -152,7 +160,7 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
             objc_setAssociatedObject(root, kDIContentKey, content, OBJC_ASSOCIATION_ASSIGN);
 
             @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
-            NSLog(@"[SBLiquidGlass-DI-NativeTest2] glass sibling attached root=%@ content=%@ filter=%@",
+            NSLog(@"[SBLiquidGlass-DI-NativeTest3] glass sibling attached root=%@ content=%@ filter=%@",
                   NSStringFromClass(root.class), NSStringFromClass(content.class), filterType);
         }
 
@@ -169,7 +177,7 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
 
         diSyncGlassToContent(root, content, glass);
     } @catch (NSException *e) {
-        NSLog(@"[SBLiquidGlass-DI-NativeTest2] exception: %@", e);
+        NSLog(@"[SBLiquidGlass-DI-NativeTest3] exception: %@", e);
     }
 }
 
@@ -205,7 +213,7 @@ static void diRemoveGlass(SBSystemApertureContainerView *root) {
     if (self.window) {
         diClearBackgroundOnly(self);
         diClearKnownNativeBackgrounds(self);
-        diClearOpaqueBackgroundSublayers(self);
+        diNeutralizeNativeBackdropLayers(self.layer);
     }
 }
 
@@ -214,7 +222,7 @@ static void diRemoveGlass(SBSystemApertureContainerView *root) {
     if (self.window) {
         diClearBackgroundOnly(self);
         diClearKnownNativeBackgrounds(self);
-        diClearOpaqueBackgroundSublayers(self);
+        diNeutralizeNativeBackdropLayers(self.layer);
     }
 }
 
@@ -231,6 +239,9 @@ static void diRemoveGlass(SBSystemApertureContainerView *root) {
 - (void)layoutSubviews {
     %orig;
     if (!diIsNativeApertureView(self)) return;
+
+    diClearBackgroundOnly(self);
+    diNeutralizeNativeBackdropLayers(self.layer);
 
     // Only clear the known platter/background node; NEVER set alpha on the
     // whole touch-pass-through hierarchy, since it may contain live content.
