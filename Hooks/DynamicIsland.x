@@ -1,6 +1,7 @@
-// Dynamic Island Native Test8.1 - 修复崩溃版
+// Dynamic Island Native Test8.2 - 修复编译错误版
 // 修复：正确识别 iOS 17 灵动岛视图层级，修复 dump 时机
 // 修复崩溃：玻璃层直接插到 root 最底层，不碰内部视图，避免 sbsa_onlyObjectOrNilAssert
+// 修复编译错误：删除未使用的 diSyncGlassToContent 函数（-Werror 导致编译失败）
 // 安装后打开灵动岛，等1秒，用 Filza 打开 /var/mobile/Documents/di_dump.txt
 
 #import <UIKit/UIKit.h>
@@ -231,21 +232,6 @@ static UIView *diFindActualContentView(UIView *root) {
 }
 
 #pragma mark - 液态玻璃应用
-
-static void diSyncGlassToContent(UIView *content, LGLiveBackdropView *glass) {
-    if (!content || !glass) return;
-    glass.frame = content.bounds;
-    glass.autoresizingMask = UIViewAutoresizingFlexibleWidth |
-                             UIViewAutoresizingFlexibleHeight;
-    glass.backgroundColor = UIColor.clearColor;
-    glass.alpha = 1.0;
-    CGFloat radius = content.layer.cornerRadius;
-    if (radius <= 0.0)
-        radius = MIN(CGRectGetWidth(content.bounds), CGRectGetHeight(content.bounds)) * 0.5;
-    glass.layer.cornerRadius = radius;
-    glass.layer.cornerCurve = kCACornerCurveContinuous;
-    glass.layer.masksToBounds = YES;
-}
 
 static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
     @try {
