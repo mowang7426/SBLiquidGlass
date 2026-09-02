@@ -4,7 +4,7 @@
 #import "../Shared/LGGlassKit.h"
 #import <objc/runtime.h>
 
-// Native Dynamic Island Test1.
+// Native Dynamic Island Test2.
 // IMPORTANT: _SBSystemApertureContainerViewContentView has an internal
 // invariant about its child contentView. Never insert our own subview into it.
 // The previous Test3 violated that invariant and caused sbsa_onlyObjectOrNilAssert.
@@ -37,22 +37,40 @@ static void diClearBackgroundOnly(UIView *view) {
     } @catch (__unused NSException *e) {}
 }
 
-static void diClearRootAndApertureBackgrounds(UIView *root) {
-    if (!root) return;
 
-    // Test1: the native aperture ROOT may itself be the opaque black surface
-    // that the CABackdropLayer is sampling. Clear only the root and known
-    // background/material containers; do not alter Apple's content hierarchy.
-    diClearBackgroundOnly(root);
+static BOOL diLayerLooksLikeFullBackground(CALayer *layer, UIView *owner) {
+    if (!layer || !owner) return NO;
+    CGRect b = owner.bounds;
+    CGRect f = layer.frame;
+    if (CGRectIsEmpty(f) || CGRectIsEmpty(b)) return NO;
 
-    for (UIView *sub in [root.subviews copy]) {
-        NSString *n = NSStringFromClass(sub.class);
-        if ([n rangeOfString:@"Background" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-            [n rangeOfString:@"Backdrop" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-            [n rangeOfString:@"Material" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-            [n rangeOfString:@"Platter" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-            [n isEqualToString:@"SBFTouchPassThroughView"]) {
-            diClearBackgroundOnly(sub);
+    CGFloat tol = 2.0;
+    BOOL covers = fabs(CGRectGetWidth(f) - CGRectGetWidth(b)) <= tol &&
+                  fabs(CGRectGetHeight(f) - CGRectGetHeight(b)) <= tol;
+    BOOL originOK = fabs(CGRectGetMinX(f)) <= tol &&
+                    fabs(CGRectGetMinY(f)) <= tol;
+    return covers && originOK;
+}
+
+static void diClearOpaqueBackgroundSublayers(UIView *view) {
+    if (!view) return;
+
+    CALayer *rootLayer = view.layer;
+    for (CALayer *layer in [rootLayer.sublayers copy]) {
+        if (!diLayerLooksLikeFullBackground(layer, view))
+            continue;
+
+        // Only clear a layer that actually has a solid background. Do not
+        // remove it: keeping the layer preserves Apple's animation/layout.
+        CGColorRef bg = layer.backgroundColor;
+        if (bg) {
+            const CGFloat *c = CGColorGetComponents(bg);
+            size_t n = CGColorGetNumberOfComponents(bg);
+            CGFloat alpha = (n >= 4) ? c[3] : c[n - 1];
+            if (alpha > 0.5) {
+                layer.backgroundColor = UIColor.clearColor.CGColor;
+                layer.opaque = NO;
+            }
         }
     }
 }
@@ -108,15 +126,11 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
         }
         if (!content || CGRectIsEmpty(content.bounds)) return;
 
-        // Test1: clear the aperture root first. If the root itself is the
-        // opaque black surface, the sibling backdrop would otherwise sample
-        // that black surface instead of the content behind Dynamic Island.
-        diClearRootAndApertureBackgrounds(root);
-
-        // Then clear only the content view's own background and known material
-        // descendants. Never insert/remove subviews from Apple's content view.
+        // First make the special content view's own layer transparent.
+        // This does not change its children or its bounds.
         diClearBackgroundOnly(content);
         diClearKnownNativeBackgrounds(content);
+        diClearOpaqueBackgroundSublayers(content);
 
         LGLiveBackdropView *glass = objc_getAssociatedObject(root, kDIGlassKey);
         if (!glass) {
@@ -138,7 +152,7 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
             objc_setAssociatedObject(root, kDIContentKey, content, OBJC_ASSOCIATION_ASSIGN);
 
             @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
-            NSLog(@"[SBLiquidGlass-DI-NativeTest1] glass sibling attached root=%@ content=%@ filter=%@",
+            NSLog(@"[SBLiquidGlass-DI-NativeTest2] glass sibling attached root=%@ content=%@ filter=%@",
                   NSStringFromClass(root.class), NSStringFromClass(content.class), filterType);
         }
 
@@ -155,7 +169,7 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
 
         diSyncGlassToContent(root, content, glass);
     } @catch (NSException *e) {
-        NSLog(@"[SBLiquidGlass-DI-NativeTest1] exception: %@", e);
+        NSLog(@"[SBLiquidGlass-DI-NativeTest2] exception: %@", e);
     }
 }
 
@@ -191,6 +205,7 @@ static void diRemoveGlass(SBSystemApertureContainerView *root) {
     if (self.window) {
         diClearBackgroundOnly(self);
         diClearKnownNativeBackgrounds(self);
+        diClearOpaqueBackgroundSublayers(self);
     }
 }
 
@@ -199,6 +214,7 @@ static void diRemoveGlass(SBSystemApertureContainerView *root) {
     if (self.window) {
         diClearBackgroundOnly(self);
         diClearKnownNativeBackgrounds(self);
+        diClearOpaqueBackgroundSublayers(self);
     }
 }
 
@@ -215,9 +231,6 @@ static void diRemoveGlass(SBSystemApertureContainerView *root) {
 - (void)layoutSubviews {
     %orig;
     if (!diIsNativeApertureView(self)) return;
-
-    // The pass-through container can itself carry the opaque surface.
-    diClearBackgroundOnly(self);
 
     // Only clear the known platter/background node; NEVER set alpha on the
     // whole touch-pass-through hierarchy, since it may contain live content.
