@@ -1,6 +1,6 @@
 Package: dylv.sbliquidglass
 Name: SBLiquidGlass
-Version: 1.4.0
+Version: 1.5.0
 Architecture: iphoneos-arm
 Description: A staged Liquid Glass system UI tweak with a safe surface architecture.
 Maintainer: MoWang
