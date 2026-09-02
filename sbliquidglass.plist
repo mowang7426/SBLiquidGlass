@@ -1,11 +1,13 @@
 {
     Filter = {
         Bundles = (
-            "com.apple.UIKit",
-            "com.apple.mobilesafari",
-        );
-        Executables = (
-            "MobileSafari",
+            "com.apple.springboard",
+            "com.apple.MediaRemoteUI",
+            "com.apple.chronod",
+            "com.apple.chrono.WidgetRenderer-Default",
+            "com.apple.chrono.WidgetRenderer-CarPlay",
+            "com.apple.ClockAngel",
+            "com.apple.InCallService"
         );
     };
 }
