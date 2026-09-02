@@ -7,6 +7,8 @@
 
 static void *kLGBannerTransparentKey = &kLGBannerTransparentKey;
 
+static void *kLGBannerLiquidGlassKey = &kLGBannerLiquidGlassKey;
+
 static void LGApplyBannerTransparentLiquidEffect(UIView *material, BOOL isTopBanner) {
     @try {
         if (!material || !material.superview) return;
@@ -14,28 +16,48 @@ static void LGApplyBannerTransparentLiquidEffect(UIView *material, BOOL isTopBan
         // 只对顶部横幅（Banner）应用效果，通知中心的通知保持原样
         if (!isTopBanner) return;
         
-        // 完全透明，不添加任何叠加层，让液态玻璃效果直接显示出来（跟Dock栏一样）
+        UIView *parent = material.superview;
         
-        // 确保原始 MTMaterialView 是完全透明的
-        material.backgroundColor = [UIColor clearColor];
-        material.opaque = NO;
-        if (material.layer.backgroundColor) {
-            material.layer.backgroundColor = [UIColor clearColor].CGColor;
+        // 查找或创建液态玻璃视图
+        LGLiveBackdropView *glass = objc_getAssociatedObject(material, kLGBannerLiquidGlassKey);
+        if (!glass) {
+            // 创建液态玻璃视图，跟Dock栏用一样的 filterType
+            NSString *filterType = LGFilterTypeForHostPrefix(@"Banner");
+            if (!filterType.length) filterType = @"dylv.liquidglass.banner";
+            
+            glass = [[LGLiveBackdropView alloc] initWithFrame:parent.bounds
+                                                     groupName:nil
+                                                    filterType:filterType];
+            glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            glass.userInteractionEnabled = NO;
+            glass.backgroundColor = [UIColor clearColor];
+            glass.opaque = NO;
+            
+            // 把液态玻璃视图添加到父视图中，放在 MTMaterialView 的下面
+            [parent insertSubview:glass belowSubview:material];
+            
+            objc_setAssociatedObject(material, kLGBannerLiquidGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            
+            NSLog(@"[SBLiquidGlass-Banner] Created liquid glass view for banner");
         }
         
-        // 遍历子视图，清除所有不透明的背景
-        for (UIView *sub in [material.subviews copy]) {
-            sub.backgroundColor = [UIColor clearColor];
-            sub.opaque = NO;
-            if (sub.layer.backgroundColor) {
-                sub.layer.backgroundColor = [UIColor clearColor].CGColor;
-            }
-            // 如果是 UIVisualEffectView，关闭 effect
-            if ([sub isKindOfClass:[UIVisualEffectView class]]) {
-                UIVisualEffectView *ev = (UIVisualEffectView *)sub;
-                ev.effect = nil;
-            }
+        // 更新液态玻璃视图的 frame 和圆角
+        glass.frame = parent.bounds;
+        CGFloat cornerRadius = material.layer.cornerRadius > 0 ? material.layer.cornerRadius : 22.0;
+        glass.layer.cornerRadius = cornerRadius;
+        glass.layer.cornerCurve = kCACornerCurveContinuous;
+        glass.layer.masksToBounds = YES;
+        
+        // 确保液态玻璃视图在最底层
+        if ([parent.subviews firstObject] != glass) {
+            [parent insertSubview:glass atIndex:0];
         }
+        
+        // 隐藏原始的 MTMaterialView（因为液态玻璃视图已经替换了它的位置）
+        material.hidden = YES;
+        
+        // 应用滤镜
+        @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
         
         NSLog(@"[SBLiquidGlass-Banner] Transparent liquid effect applied (same as Dock)");
     } @catch (NSException *e) {
