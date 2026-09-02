@@ -1,5 +1,6 @@
-// Dynamic Island Native Test8 - 修复版
+// Dynamic Island Native Test8.1 - 修复崩溃版
 // 修复：正确识别 iOS 17 灵动岛视图层级，修复 dump 时机
+// 修复崩溃：玻璃层直接插到 root 最底层，不碰内部视图，避免 sbsa_onlyObjectOrNilAssert
 // 安装后打开灵动岛，等1秒，用 Filza 打开 /var/mobile/Documents/di_dump.txt
 
 #import <UIKit/UIKit.h>
@@ -290,37 +291,43 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
         if (!glass) {
             NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
             if (!filterType.length) filterType = @"dylv.liquidglass.dynamicisland";
-            glass = [[LGLiveBackdropView alloc] initWithFrame:content.bounds
+
+            // 把 content 的 frame 转换到 root 的坐标系
+            CGRect glassFrame = [content convertRect:content.bounds toView:root];
+
+            glass = [[LGLiveBackdropView alloc] initWithFrame:glassFrame
                                                      groupName:nil
                                                     filterType:filterType];
             glass.backgroundColor = UIColor.clearColor;
             glass.userInteractionEnabled = NO;
 
-            // 把玻璃插到 content view 的 superview 里，在 content 下面
-            UIView *parent = content.superview ?: root;
-            NSUInteger idx = [parent.subviews indexOfObject:content];
-            if (idx == NSNotFound) idx = 0;
-            [parent insertSubview:glass atIndex:idx];
+            // 关键修复：直接插到最顶层的 root 里，放在最下面（index 0）
+            // 不碰任何内部视图，避免触发 sbsa_onlyObjectOrNilAssert 崩溃
+            [root insertSubview:glass atIndex:0];
 
             objc_setAssociatedObject(root, kDIGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
-            NSLog(@"[DI-Native] Glass attached to parent=%@ content=%@",
-                  NSStringFromClass(parent.class), NSStringFromClass(content.class));
+            NSLog(@"[DI-Native] Glass attached to root, content=%@ frame=%@",
+                  NSStringFromClass(content.class), NSStringFromCGRect(glassFrame));
         }
 
-        // 确保玻璃在 content 下面
-        UIView *parent = content.superview ?: root;
-        if (glass.superview != parent) {
-            [parent insertSubview:glass atIndex:0];
-        } else {
-            NSUInteger contentIndex = [parent.subviews indexOfObject:content];
-            NSUInteger glassIndex = [parent.subviews indexOfObject:glass];
-            if (contentIndex != NSNotFound && glassIndex != contentIndex) {
-                [parent insertSubview:glass atIndex:contentIndex];
-            }
+        // 确保玻璃在 root 的最下面
+        if (glass.superview != root) {
+            [root insertSubview:glass atIndex:0];
+        } else if ([root.subviews indexOfObject:glass] != 0) {
+            [root insertSubview:glass atIndex:0];
         }
 
-        diSyncGlassToContent(content, glass);
+        // 同步玻璃的 frame 和 cornerRadius 到 content
+        CGRect glassFrame = [content convertRect:content.bounds toView:root];
+        glass.frame = glassFrame;
+        glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        CGFloat radius = content.layer.cornerRadius;
+        if (radius <= 0.0)
+            radius = MIN(CGRectGetWidth(content.bounds), CGRectGetHeight(content.bounds)) * 0.5;
+        glass.layer.cornerRadius = radius;
+        glass.layer.cornerCurve = kCACornerCurveContinuous;
+        glass.layer.masksToBounds = YES;
 
         // 再清一次背景
         diClearAllBackgroundsInView(content);
