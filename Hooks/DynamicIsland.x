@@ -10,159 +10,120 @@
 @interface SBSystemApertureContainerView : UIView
 @end
 
-@interface _SBSystemApertureMagiciansCurtainView : UIView
-@end
-
 #pragma mark - 全局变量
 
 static void *kDISystemGlassKey = &kDISystemGlassKey;
-static void *kDIDidProcessKey = &kDIDidProcessKey;
 
-#pragma mark - 递归清除所有黑色背景
+#pragma mark - 只清除灵动岛容器内部的 MTMaterialView
 
-static void diRecursivelyClearAllBlackBackgrounds(UIView *view, NSInteger depth) {
-    if (!view || depth > 12) return;
+static void diClearIslandMaterialViews(UIView *container) {
     @try {
-        // 清除当前视图的背景
-        view.backgroundColor = [UIColor clearColor];
-        view.opaque = NO;
-        if (view.layer.backgroundColor) {
-            view.layer.backgroundColor = [UIColor clearColor].CGColor;
-        }
-        if (view.layer.contents) {
-            view.layer.contents = nil;
-        }
+        if (!container) return;
         
-        // 如果是 MTMaterialView，隐藏它
-        if ([NSStringFromClass(view.class) isEqualToString:@"MTMaterialView"]) {
-            view.hidden = YES;
-        }
-        
-        // 如果是 UIVisualEffectView，关闭 effect
-        if ([view isKindOfClass:[UIVisualEffectView class]]) {
-            UIVisualEffectView *ev = (UIVisualEffectView *)view;
-            ev.effect = nil;
-        }
-        
-        // 清除所有 sublayers
-        for (CALayer *layer in [view.layer.sublayers copy]) {
-            if (layer.backgroundColor) {
-                layer.backgroundColor = [UIColor clearColor].CGColor;
+        // 只遍历容器内部的子视图，不影响外部
+        for (UIView *sub in [container.subviews copy]) {
+            NSString *className = NSStringFromClass(sub.class);
+            
+            // 只隐藏 MTMaterialView，不影响其他视图
+            if ([className isEqualToString:@"MTMaterialView"]) {
+                sub.hidden = YES;
+                sub.backgroundColor = [UIColor clearColor];
+                if (sub.layer.backgroundColor) {
+                    sub.layer.backgroundColor = [UIColor clearColor].CGColor;
+                }
+                NSLog(@"[SBLiquidGlass-DI] Hid MTMaterialView in island");
             }
-            if (layer.contents) {
-                layer.contents = nil;
+            
+            // 关闭 UIVisualEffectView 的 effect
+            if ([sub isKindOfClass:[UIVisualEffectView class]]) {
+                UIVisualEffectView *ev = (UIVisualEffectView *)sub;
+                ev.effect = nil;
             }
-            if ([layer isKindOfClass:[CAShapeLayer class]]) {
-                CAShapeLayer *shape = (CAShapeLayer *)layer;
-                shape.fillColor = [UIColor clearColor].CGColor;
-                shape.strokeColor = [UIColor clearColor].CGColor;
+            
+            // 只递归一层，不深入递归，避免影响其他视图
+            for (UIView *subsub in [sub.subviews copy]) {
+                NSString *subsubClassName = NSStringFromClass(subsub.class);
+                if ([subsubClassName isEqualToString:@"MTMaterialView"]) {
+                    subsub.hidden = YES;
+                    subsub.backgroundColor = [UIColor clearColor];
+                    if (subsub.layer.backgroundColor) {
+                        subsub.layer.backgroundColor = [UIColor clearColor].CGColor;
+                    }
+                }
+                if ([subsub isKindOfClass:[UIVisualEffectView class]]) {
+                    UIVisualEffectView *ev = (UIVisualEffectView *)subsub;
+                    ev.effect = nil;
+                }
             }
-        }
-        
-        // 递归处理子视图
-        for (UIView *sub in [view.subviews copy]) {
-            diRecursivelyClearAllBlackBackgrounds(sub, depth + 1);
         }
     } @catch (__unused NSException *e) {}
 }
 
-#pragma mark - 找到最顶层的灵动岛容器
-
-static UIView *diFindTopLevelIslandContainer(UIView *view) {
-    if (!view) return nil;
-    
-    // 向上查找，找到最顶层的灵动岛相关容器
-    UIView *current = view;
-    UIView *topContainer = nil;
-    
-    while (current) {
-        NSString *className = NSStringFromClass(current.class);
-        if ([className containsString:@"Aperture"] ||
-            [className containsString:@"Island"] ||
-            [className containsString:@"Curtain"] ||
-            [className containsString:@"Pill"] ||
-            [className containsString:@"Platter"]) {
-            topContainer = current;
-        }
-        current = current.superview;
-    }
-    
-    return topContainer ?: view;
-}
-
 #pragma mark - 系统灵动岛透明 + 液态玻璃效果
 
-static void diApplySystemIslandLiquidGlass(UIView *view) {
+static void diApplySystemIslandLiquidGlass(SBSystemApertureContainerView *container) {
     @try {
-        if (!view || !view.window) return;
+        if (!container || !container.window) return;
         if (!lgHostEnabled(@"DynamicIsland")) return;
-        
-        // 找到最顶层的灵动岛容器
-        UIView *container = diFindTopLevelIslandContainer(view);
-        if (!container) container = view;
-        
-        // 避免重复处理
-        if (objc_getAssociatedObject(container, kDIDidProcessKey)) {
-            // 已经处理过，只需要更新 frame 和清除背景
-            LGLiveBackdropView *glass = objc_getAssociatedObject(container, kDISystemGlassKey);
-            if (glass) {
-                glass.frame = container.bounds;
-                CGFloat cornerRadius = container.layer.cornerRadius > 0 ? container.layer.cornerRadius : CGRectGetHeight(container.bounds) * 0.5;
-                glass.layer.cornerRadius = cornerRadius;
-                [container insertSubview:glass atIndex:0];
-            }
-            diRecursivelyClearAllBlackBackgrounds(container, 0);
-            return;
-        }
-        
         if (CGRectIsEmpty(container.bounds) || CGRectGetWidth(container.bounds) < 10) return;
         
-        // 标记已经处理
-        objc_setAssociatedObject(container, kDIDidProcessKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        // 查找或创建液态玻璃视图
+        LGLiveBackdropView *glass = objc_getAssociatedObject(container, kDISystemGlassKey);
+        if (!glass) {
+            NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
+            if (!filterType.length) filterType = @"dylv.liquidglass.dynamicisland";
+            
+            glass = [[LGLiveBackdropView alloc] initWithFrame:container.bounds
+                                                     groupName:nil
+                                                    filterType:filterType];
+            glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            glass.userInteractionEnabled = NO; // 确保不影响点击
+            glass.backgroundColor = [UIColor clearColor];
+            glass.opaque = NO;
+            
+            // 把液态玻璃视图添加到容器内部的最底层
+            [container insertSubview:glass atIndex:0];
+            
+            objc_setAssociatedObject(container, kDISystemGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            
+            NSLog(@"[SBLiquidGlass-DI] Created liquid glass for system island container");
+        }
         
-        NSLog(@"[SBLiquidGlass-DI] Processing island container: %@ frame=%@",
-              NSStringFromClass(container.class), NSStringFromCGRect(container.frame));
-        
-        // 创建液态玻璃视图
-        NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
-        if (!filterType.length) filterType = @"dylv.liquidglass.dynamicisland";
-        
-        LGLiveBackdropView *glass = [[LGLiveBackdropView alloc] initWithFrame:container.bounds
-                                                                       groupName:nil
-                                                                      filterType:filterType];
-        glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        glass.userInteractionEnabled = NO;
-        glass.backgroundColor = [UIColor clearColor];
-        glass.opaque = NO;
-        
+        // 更新液态玻璃视图的 frame 和圆角
+        glass.frame = container.bounds;
         CGFloat cornerRadius = container.layer.cornerRadius > 0 ? container.layer.cornerRadius : CGRectGetHeight(container.bounds) * 0.5;
         glass.layer.cornerRadius = cornerRadius;
         glass.layer.cornerCurve = kCACornerCurveContinuous;
         glass.layer.masksToBounds = YES;
         
-        // 把液态玻璃视图添加到容器的最底层
-        [container insertSubview:glass atIndex:0];
+        // 确保液态玻璃视图在容器内部的最底层
+        if ([container.subviews firstObject] != glass) {
+            [container insertSubview:glass atIndex:0];
+        }
         
-        objc_setAssociatedObject(container, kDISystemGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        // 清除容器自身的背景
+        container.backgroundColor = [UIColor clearColor];
+        container.opaque = NO;
+        if (container.layer.backgroundColor) {
+            container.layer.backgroundColor = [UIColor clearColor].CGColor;
+        }
         
-        // 递归清除所有黑色背景
-        diRecursivelyClearAllBlackBackgrounds(container, 0);
+        // 只清除容器内部的 MTMaterialView，不影响其他视图
+        diClearIslandMaterialViews(container);
         
         // 应用滤镜
         @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
         
-        // 延迟再次清除和应用（因为系统可能会重新设置背景）
-        for (NSNumber *delay in @[@0.1, @0.3, @0.5, @1.0]) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay.doubleValue * NSEC_PER_SEC)),
-                           dispatch_get_main_queue(), ^{
-                               @try {
-                                   diRecursivelyClearAllBlackBackgrounds(container, 0);
-                                   [glass applyFilters];
-                               } @catch (__unused NSException *e) {}
-                           });
-        }
+        // 延迟再次清除（系统可能会重新显示 MTMaterialView）
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+                           @try {
+                               diClearIslandMaterialViews(container);
+                               [glass applyFilters];
+                           } @catch (__unused NSException *e) {}
+                       });
         
-        NSLog(@"[SBLiquidGlass-DI] System island liquid glass applied to: %@", NSStringFromClass(container.class));
+        NSLog(@"[SBLiquidGlass-DI] System island liquid glass applied");
     } @catch (NSException *e) {
         NSLog(@"[SBLiquidGlass-DI] Exception: %@", e);
     }
@@ -190,30 +151,8 @@ static void diApplySystemIslandLiquidGlass(UIView *view) {
 
 %end
 
-#pragma mark - Hook 系统灵动岛 Curtain 视图（展开后的面板）
-
-%hook _SBSystemApertureMagiciansCurtainView
-
-- (void)didMoveToWindow {
-    %orig;
-    @try {
-        if (self.window) {
-            diApplySystemIslandLiquidGlass(self);
-        }
-    } @catch (__unused NSException *e) {}
-}
-
-- (void)layoutSubviews {
-    %orig;
-    @try {
-        diApplySystemIslandLiquidGlass(self);
-    } @catch (__unused NSException *e) {}
-}
-
-%end
-
 %ctor {
     @try {
-        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (aggressive system island)");
+        NSLog(@"[SBLiquidGlass] DynamicIsland tweak loaded (conservative system island)");
     } @catch (__unused NSException *e) {}
 }
