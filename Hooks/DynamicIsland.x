@@ -142,7 +142,7 @@ static void diHideBackgroundViewsRecursive(UIView *view, NSInteger depth) {
 }
 
 // 找到灵动岛区域的 frame（遍历所有层，找到最大的非零 frame）
-static CGRect diFindIslandFrame(CALayer *layer) {
+__attribute__((unused)) static CGRect diFindIslandFrame(CALayer *layer) {
     CGRect result = CGRectZero;
     if (!layer) return result;
     @try {
