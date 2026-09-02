@@ -1,7 +1,6 @@
-// Dynamic Island Native Test12 - 最激进清除版
-// 对非内容层的黑色背景层直接 hidden=YES
-// layout 后延迟再清一次（防止系统恢复）
-// 清除 contents 里的黑色内容
+// Dynamic Island Native Test13 - 图层树定位+超激进清除版
+// 直接在图层树里找灵动岛容器层来定位玻璃层（不用视图树的 contentView）
+// 超激进清除：只要背景是黑色的非内容层，直接 hidden=YES
 
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -25,7 +24,7 @@ static BOOL diColorIsBlack(CGColorRef color) {
     CGFloat r=0,g=0,b=0,a=0;
     if (n >= 4) { r=c[0]; g=c[1]; b=c[2]; a=c[3]; }
     else if (n == 2) { r=g=b=c[0]; a=c[1]; }
-    return a > 0.05 && r < 0.2 && g < 0.2 && b < 0.2;
+    return a > 0.05 && r < 0.25 && g < 0.25 && b < 0.25;
 }
 
 // 判断一个层是不是内容层（不能隐藏）
@@ -38,12 +37,15 @@ static BOOL diIsContentLayer(CALayer *layer) {
            [className isEqualToString:@"_UIReplicantLayer"] ||
            [className isEqualToString:@"CABackdropLayer"] ||
            [className isEqualToString:@"CAEAGLLayer"] ||
-           [className isEqualToString:@"CAMetalLayer"];
+           [className isEqualToString:@"CAMetalLayer"] ||
+           [className isEqualToString:@"CAReplicatorLayer"] ||
+           [className isEqualToString:@"CATextLayer"] ||
+           [className isEqualToString:@"CAShapeLayer"];
 }
 
-// 递归清除所有层的黑色背景（最激进版：直接隐藏背景层）
-static void diClearAllBlackLayersRecursive(CALayer *layer, CGRect referenceBounds, NSInteger depth) {
-    if (!layer || depth > 40) return;
+// 递归清除所有层的黑色背景（超激进版：只要黑色就隐藏）
+static void diClearAllBlackLayersRecursive(CALayer *layer, NSInteger depth) {
+    if (!layer || depth > 50) return;
     @try {
         // 跳过内容层
         if (diIsContentLayer(layer)) {
@@ -51,36 +53,36 @@ static void diClearAllBlackLayersRecursive(CALayer *layer, CGRect referenceBound
             if (diColorIsBlack(layer.backgroundColor)) {
                 layer.backgroundColor = UIColor.clearColor.CGColor;
             }
+            // 内容层也要递归处理子层
+            for (CALayer *sublayer in [layer.sublayers copy]) {
+                diClearAllBlackLayersRecursive(sublayer, depth + 1);
+            }
             return;
         }
 
-        CGRect layerBounds = layer.bounds;
-        CGFloat ratioW = CGRectGetWidth(layerBounds) / CGRectGetWidth(referenceBounds);
-        CGFloat ratioH = CGRectGetHeight(layerBounds) / CGRectGetHeight(referenceBounds);
-        BOOL coversMost = (ratioW > 0.6 && ratioH > 0.5);
-
-        // 如果这个层覆盖了大部分面积，并且背景是黑色，直接隐藏
-        if (coversMost && diColorIsBlack(layer.backgroundColor)) {
-            NSLog(@"[DI-Native] Hiding black background layer: %@ bounds=%@",
+        // 超激进：只要背景是黑色，就直接隐藏
+        if (diColorIsBlack(layer.backgroundColor)) {
+            NSLog(@"[DI-Native] Hiding black layer: %@ bounds=%@ bg=black",
                   NSStringFromClass([layer class]), NSStringFromCGRect(layer.bounds));
             layer.hidden = YES;
             layer.opacity = 0.0;
             layer.backgroundColor = UIColor.clearColor.CGColor;
-            return; // 隐藏了就不用处理子层了
+            // 隐藏了就不用处理子层了（子层也会被隐藏）
+            return;
         }
 
-        // 清除背景色
-        if (diColorIsBlack(layer.backgroundColor)) {
-            layer.backgroundColor = UIColor.clearColor.CGColor;
+        // 清除背景色（即使不是纯黑，只要是深色也清）
+        if (layer.backgroundColor) {
+            size_t n = CGColorGetNumberOfComponents(layer.backgroundColor);
+            const CGFloat *c = CGColorGetComponents(layer.backgroundColor);
+            if (c && n >= 4 && c[3] > 0.1 && c[0] < 0.3 && c[1] < 0.3 && c[2] < 0.3) {
+                layer.backgroundColor = UIColor.clearColor.CGColor;
+            }
         }
-
-        // 清除 contents（如果是纯色的黑色）
-        // 注意：不要清除有内容的 contents
-        // layer.contents = nil; // 暂时不清除，可能会影响内容
 
         // 递归处理子层
         for (CALayer *sublayer in [layer.sublayers copy]) {
-            diClearAllBlackLayersRecursive(sublayer, referenceBounds, depth + 1);
+            diClearAllBlackLayersRecursive(sublayer, depth + 1);
         }
     } @catch (__unused NSException *e) {}
 }
@@ -114,39 +116,42 @@ static void diHideBackgroundViewsRecursive(UIView *view, NSInteger depth) {
     } @catch (__unused NSException *e) {}
 }
 
-// 找到灵动岛的实际内容视图（通过 frame 大小识别）
-static UIView *diFindIslandContentView(UIView *root) {
-    if (!root) return nil;
-    for (UIView *sub in [root.subviews copy]) {
-        CGRect frame = sub.frame;
-        if (CGRectGetWidth(frame) > 80 && CGRectGetWidth(frame) < 500 &&
-            CGRectGetHeight(frame) > 25 && CGRectGetHeight(frame) < 200) {
-            return sub;
+// 在图层树里找灵动岛的容器层（最外层、有 cornerRadius、尺寸合适）
+static CALayer *diFindIslandContainerLayer(CALayer *layer, NSInteger depth) {
+    if (!layer || depth > 30) return nil;
+    @try {
+        CGRect bounds = layer.bounds;
+        // 灵动岛的尺寸：宽 100-450，高 30-150，有 cornerRadius
+        if (CGRectGetWidth(bounds) > 100 && CGRectGetWidth(bounds) < 450 &&
+            CGRectGetHeight(bounds) > 30 && CGRectGetHeight(bounds) < 150 &&
+            layer.cornerRadius > 5) {
+            NSString *className = NSStringFromClass([layer class]);
+            // 排除内容层
+            if (![className isEqualToString:@"CALayerHost"] &&
+                ![className isEqualToString:@"CAPortalLayer"] &&
+                ![className isEqualToString:@"CAGainMapLayer"] &&
+                ![className isEqualToString:@"CABackdropLayer"]) {
+                // 这可能是灵动岛的容器层
+                // 检查它的子层里有没有 CALayerHost（说明它包含内容）
+                for (CALayer *sublayer in layer.sublayers) {
+                    if ([NSStringFromClass([sublayer class]) isEqualToString:@"CALayerHost"]) {
+                        NSLog(@"[DI-Native] Found island container layer: %@ bounds=%@ cornerRadius=%.1f",
+                              className, NSStringFromCGRect(bounds), layer.cornerRadius);
+                        return layer;
+                    }
+                    // 递归检查子层的子层
+                    CALayer *found = diFindIslandContainerLayer(sublayer, depth + 1);
+                    if (found) return found;
+                }
+            }
         }
-        UIView *found = diFindIslandContentView(sub);
-        if (found) return found;
-    }
-    return nil;
-}
 
-// 找到灵动岛的容器层（在图层树里找）
-static CALayer *diFindIslandContainerLayer(CALayer *layer) {
-    if (!layer) return nil;
-    CGRect bounds = layer.bounds;
-    if (CGRectGetWidth(bounds) > 100 && CGRectGetWidth(bounds) < 450 &&
-        CGRectGetHeight(bounds) > 30 && CGRectGetHeight(bounds) < 150 &&
-        layer.cornerRadius > 5) {
-        NSString *className = NSStringFromClass([layer class]);
-        if (![className isEqualToString:@"CALayerHost"] &&
-            ![className isEqualToString:@"CAPortalLayer"] &&
-            ![className isEqualToString:@"CAGainMapLayer"]) {
-            return layer;
+        // 递归查找
+        for (CALayer *sublayer in [layer.sublayers copy]) {
+            CALayer *found = diFindIslandContainerLayer(sublayer, depth + 1);
+            if (found) return found;
         }
-    }
-    for (CALayer *sublayer in [layer.sublayers copy]) {
-        CALayer *found = diFindIslandContainerLayer(sublayer);
-        if (found) return found;
-    }
+    } @catch (__unused NSException *e) {}
     return nil;
 }
 
@@ -160,49 +165,34 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
         // 第一步：激进隐藏所有背景视图
         diHideBackgroundViewsRecursive(root, 0);
 
-        // 找到灵动岛的实际内容视图
-        UIView *contentView = diFindIslandContentView(root);
-        CGRect referenceBounds = CGRectZero;
-
-        if (contentView) {
-            referenceBounds = contentView.bounds;
-            NSLog(@"[DI-Native] Found island content view: %@ frame=%@",
-                  NSStringFromClass(contentView.class),
-                  NSStringFromCGRect(contentView.frame));
-        } else {
-            // 尝试在图层树里找
-            CALayer *containerLayer = diFindIslandContainerLayer(root.layer);
-            if (containerLayer) {
-                referenceBounds = containerLayer.bounds;
-                NSLog(@"[DI-Native] Found container layer: %@ bounds=%@",
-                      NSStringFromClass([containerLayer class]),
-                      NSStringFromCGRect(containerLayer.bounds));
-            }
-        }
-
-        if (CGRectIsEmpty(referenceBounds)) {
-            NSLog(@"[DI-Native] Could not find island content view or container layer");
+        // 第二步：在图层树里找灵动岛的容器层
+        CALayer *containerLayer = diFindIslandContainerLayer(root.layer, 0);
+        if (!containerLayer) {
+            NSLog(@"[DI-Native] Could not find island container layer");
+            // 找不到就不处理了
             return;
         }
 
-        // 第二步：递归清除所有层的黑色背景（最激进版：直接隐藏背景层）
-        diClearAllBlackLayersRecursive(root.layer, referenceBounds, 0);
+        NSLog(@"[DI-Native] Using container layer: %@ bounds=%@",
+              NSStringFromClass([containerLayer class]),
+              NSStringFromCGRect(containerLayer.bounds));
 
-        // 清除内容视图的背景
-        if (contentView) {
-            contentView.backgroundColor = UIColor.clearColor;
-            diClearAllBlackLayersRecursive(contentView.layer, referenceBounds, 0);
-        }
+        // 第三步：超激进清除容器层及其所有子层的黑色背景
+        diClearAllBlackLayersRecursive(containerLayer, 0);
 
-        // 计算玻璃层的 frame（转换到 root 坐标系）
-        CGRect glassFrame;
-        if (contentView) {
-            glassFrame = [contentView convertRect:contentView.bounds toView:root];
-        } else {
-            CALayer *containerLayer = diFindIslandContainerLayer(root.layer);
-            glassFrame = containerLayer.frame;
-        }
-        NSLog(@"[DI-Native] Glass frame: %@", NSStringFromCGRect(glassFrame));
+        // 同时清除 root 下所有层的黑色背景（有些背景层可能在容器层外面）
+        diClearAllBlackLayersRecursive(root.layer, 0);
+
+        // 第四步：计算玻璃层的 frame
+        // 把容器层的 frame 转换到 root.layer 的坐标系
+        CGRect glassFrameInRootLayer = [root.layer convertRect:containerLayer.frame fromLayer:containerLayer.superlayer];
+        NSLog(@"[DI-Native] Container frame: %@, converted to root layer: %@",
+              NSStringFromCGRect(containerLayer.frame),
+              NSStringFromCGRect(glassFrameInRootLayer));
+
+        // 玻璃层是 UIView，插到 root 里，frame 用 root 坐标系
+        // UIView 的 frame 和它的 layer 的 frame 是一样的（在 root 的坐标系里）
+        CGRect glassFrame = glassFrameInRootLayer;
 
         // 创建或获取液态玻璃层
         LGLiveBackdropView *glass = objc_getAssociatedObject(root, kDIGlassKey);
@@ -216,6 +206,7 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
             glass.backgroundColor = UIColor.clearColor;
             glass.userInteractionEnabled = NO;
 
+            // 插到 root 的最底层
             [root insertSubview:glass atIndex:0];
 
             objc_setAssociatedObject(root, kDIGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -225,13 +216,7 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
 
         // 同步玻璃层的 frame 和 cornerRadius
         glass.frame = glassFrame;
-        CGFloat radius = 0;
-        if (contentView) {
-            radius = contentView.layer.cornerRadius;
-        } else {
-            CALayer *containerLayer = diFindIslandContainerLayer(root.layer);
-            radius = containerLayer.cornerRadius;
-        }
+        CGFloat radius = containerLayer.cornerRadius;
         if (radius <= 0.0)
             radius = CGRectGetHeight(glassFrame) * 0.5;
         glass.layer.cornerRadius = radius;
@@ -243,16 +228,20 @@ static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
             [root insertSubview:glass atIndex:0];
         }
 
-        // 第三步：延迟 0.1 秒再清一次（防止系统在 layout 后恢复黑色背景）
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // 第五步：延迟多次清除（防止系统恢复黑色背景）
+        void (^clearBlock)(void) = ^{
             @try {
                 diHideBackgroundViewsRecursive(root, 0);
-                diClearAllBlackLayersRecursive(root.layer, referenceBounds, 0);
-                if (contentView) {
-                    diClearAllBlackLayersRecursive(contentView.layer, referenceBounds, 0);
-                }
-                NSLog(@"[DI-Native] Second pass clear completed");
+                diClearAllBlackLayersRecursive(containerLayer, 0);
+                diClearAllBlackLayersRecursive(root.layer, 0);
             } @catch (__unused NSException *e) {}
+        };
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), clearBlock);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), clearBlock);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            clearBlock();
+            NSLog(@"[DI-Native] All clear passes completed");
         });
 
     } @catch (NSException *e) {
