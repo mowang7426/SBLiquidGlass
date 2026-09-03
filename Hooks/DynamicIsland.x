@@ -1,6 +1,6 @@
-// SBLiquidGlass Test32
-// Native Dynamic Island: target the real MagiciansCurtainView found by Test31.
-// IMPORTANT: this version does NOT touch the full-screen touch-pass-through views.
+// Dynamic Island - 参考 Liquidify 实现
+// 只在 SpringBoard 里加液态玻璃，不碰任何内容视图（专辑封面等）
+// 黑色背景由 DIContentClear.x 在内容进程里清除
 
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -8,115 +8,111 @@
 #import "../Shared/LGGlassKit.h"
 #import <objc/runtime.h>
 
-@interface _SBSystemApertureMagiciansCurtainView : UIView
+@interface SBSystemApertureContainerView : UIView
 @end
 
-static void *kDI32GlassKey = &kDI32GlassKey;
+static void *kDIGlassKey = &kDIGlassKey;
+static NSString *kDILogPath = @"/var/mobile/Documents/di_native_log.txt";
 
-static LGLiveBackdropView *di32GlassForView(UIView *view) {
-    return objc_getAssociatedObject(view, kDI32GlassKey);
-}
+#pragma mark - 日志工具
 
-static void di32RemoveGlass(UIView *view) {
+static void diLog(NSString *format, ...) {
     @try {
-        LGLiveBackdropView *glass = di32GlassForView(view);
-        if (glass) {
-            [glass removeFromSuperview];
-            objc_setAssociatedObject(view, kDI32GlassKey, nil, OBJC_ASSOCIATION_ASSIGN);
+        va_list args;
+        va_start(args, format);
+        NSString *msg = [[NSString alloc] initWithFormat:format arguments:args];
+        va_end(args);
+        NSLog(@"[DI-Native] %@", msg);
+        NSString *logLine = [NSString stringWithFormat:@"[%@] %@\n", [NSDate date], msg];
+        NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:kDILogPath];
+        if (!fh) {
+            [[NSFileManager defaultManager] createFileAtPath:kDILogPath contents:nil attributes:nil];
+            fh = [NSFileHandle fileHandleForWritingAtPath:kDILogPath];
+        }
+        if (fh) {
+            [fh seekToEndOfFile];
+            [fh writeData:[logLine dataUsingEncoding:NSUTF8StringEncoding]];
+            [fh closeFile];
         }
     } @catch (__unused NSException *e) {}
 }
 
-static void di32EnsureGlass(UIView *view) {
+#pragma mark - 液态玻璃应用
+
+static void diApplyGlassToRoot(SBSystemApertureContainerView *root) {
     @try {
-        if (!view || !view.window || !lgHostEnabled(@"DynamicIsland")) return;
-        if (CGRectIsEmpty(view.bounds) || CGRectGetWidth(view.bounds) < 20.0) return;
-
-        LGLiveBackdropView *glass = di32GlassForView(view);
-        CGFloat radius = view.layer.cornerRadius;
-        if (radius <= 0.0) radius = CGRectGetHeight(view.bounds) * 0.5;
-
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            [[NSFileManager defaultManager] removeItemAtPath:kDILogPath error:nil];
+        });
+        
+        diLog(@"=== diApplyGlassToRoot called ===");
+        diLog(@"root.frame=%@ root.bounds=%@",
+              NSStringFromCGRect(root.frame), NSStringFromCGRect(root.bounds));
+        
+        if (!root || !root.window || !lgHostEnabled(@"DynamicIsland")) return;
+        if (root.subviews.count == 0) return;
+        
+        // 玻璃层 frame 直接用 root.bounds（最准确，不会有坐标系偏移）
+        CGRect glassFrame = root.bounds;
+        diLog(@"Glass frame: %@", NSStringFromCGRect(glassFrame));
+        
+        // 创建或获取液态玻璃层
+        LGLiveBackdropView *glass = objc_getAssociatedObject(root, kDIGlassKey);
         if (!glass) {
             NSString *filterType = LGFilterTypeForHostPrefix(@"DynamicIsland");
-            if (!filterType) filterType = @"dylv.liquidglass.dynamicisland";
-
-            glass = [[LGLiveBackdropView alloc] initWithFrame:view.bounds
+            if (!filterType.length) filterType = @"dylv.liquidglass.dynamicisland";
+            glass = [[LGLiveBackdropView alloc] initWithFrame:glassFrame
                                                      groupName:nil
                                                     filterType:filterType];
-            glass.autoresizingMask = UIViewAutoresizingFlexibleWidth |
-                                     UIViewAutoresizingFlexibleHeight;
-            glass.userInteractionEnabled = NO;
             glass.backgroundColor = UIColor.clearColor;
-            glass.opaque = NO;
-            glass.alpha = 1.0;
-            glass.layer.cornerCurve = kCACornerCurveContinuous;
-            glass.layer.cornerRadius = radius;
-            glass.layer.masksToBounds = YES;
-
-            // The real native island is the host. Put our backdrop INSIDE it,
-            // underneath the native gain-map/content views, so the system's
-            // geometry, animation and hit-testing remain untouched.
-            [view insertSubview:glass atIndex:0];
-            objc_setAssociatedObject(view, kDI32GlassKey, glass,
-                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-
-            dispatch_async(dispatch_get_main_queue(), ^{
-                @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
-            });
-        } else {
-            glass.frame = view.bounds;
-            glass.layer.cornerRadius = radius;
+            glass.userInteractionEnabled = NO;
+            // 插到最底层，在内容下面
+            [root insertSubview:glass atIndex:0];
+            objc_setAssociatedObject(root, kDIGlassKey, glass, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            @try { [glass applyFilters]; } @catch (__unused NSException *e) {}
+            diLog(@"Glass attached, frame=%@", NSStringFromCGRect(glassFrame));
         }
-
-        // Test31 showed the curtain itself has no backgroundColor, but is
-        // marked opaque. Clear that flag so the injected backdrop can show.
-        view.backgroundColor = UIColor.clearColor;
-        view.opaque = NO;
-        view.layer.backgroundColor = UIColor.clearColor.CGColor;
-        view.layer.cornerRadius = radius;
-        view.layer.cornerCurve = kCACornerCurveContinuous;
-        view.layer.masksToBounds = YES;
-
-        // Do NOT hide/modify the native black UIView blindly. In Test31 it was
-        // already hidden; touching it caused no benefit and risks breaking
-        // system aperture state. We only neutralize a visible, exact-size,
-        // opaque black sibling when it is clearly a backdrop.
-        for (UIView *sub in [view.subviews copy]) {
-            if (sub == glass) continue;
-            if (!sub.hidden && sub.alpha > 0.99 && sub.opaque &&
-                CGRectEqualToRect(sub.bounds, view.bounds) &&
-                sub.backgroundColor) {
-                CGFloat r=0,g=0,b=0,a=0;
-                if ([sub.backgroundColor getRed:&r green:&g blue:&b alpha:&a] &&
-                    r < 0.01 && g < 0.01 && b < 0.01 && a > 0.99) {
-                    sub.backgroundColor = UIColor.clearColor;
-                    sub.opaque = NO;
-                    sub.layer.backgroundColor = UIColor.clearColor.CGColor;
-                }
-            }
+        
+        // 同步玻璃层的 frame 和 cornerRadius
+        glass.frame = glassFrame;
+        CGFloat radius = root.layer.cornerRadius;
+        if (radius <= 0) radius = CGRectGetHeight(glassFrame) * 0.5;
+        glass.layer.cornerRadius = radius;
+        glass.layer.cornerCurve = kCACornerCurveContinuous;
+        glass.layer.masksToBounds = YES;
+        
+        // 确保玻璃层在最底层
+        if ([root.subviews indexOfObject:glass] != 0) {
+            [root insertSubview:glass atIndex:0];
         }
+        
+        diLog(@"Glass updated: frame=%@ cornerRadius=%.1f",
+              NSStringFromCGRect(glass.frame), glass.layer.cornerRadius);
+        
     } @catch (NSException *e) {
-        NSLog(@"[SBLiquidGlass-DI-Test32] exception: %@", e);
+        diLog(@"EXCEPTION: %@", e);
     }
 }
 
-%hook _SBSystemApertureMagiciansCurtainView
-
-- (void)didMoveToWindow {
-    %orig;
+static void diRemoveGlass(SBSystemApertureContainerView *root) {
     @try {
-        if (self.window) di32EnsureGlass(self);
-        else di32RemoveGlass(self);
+        LGLiveBackdropView *glass = objc_getAssociatedObject(root, kDIGlassKey);
+        if (glass) [glass removeFromSuperview];
+        objc_setAssociatedObject(root, kDIGlassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     } @catch (__unused NSException *e) {}
 }
 
+#pragma mark - Hooks
+
+%hook SBSystemApertureContainerView
+- (void)didMoveToWindow {
+    %orig;
+    if (self.window) diApplyGlassToRoot(self);
+    else diRemoveGlass(self);
+}
 - (void)layoutSubviews {
     %orig;
-    @try { di32EnsureGlass(self); } @catch (__unused NSException *e) {}
+    if (self.window) diApplyGlassToRoot(self);
 }
-
 %end
-
-%ctor {
-    NSLog(@"[SBLiquidGlass-DI-Test32] native MagiciansCurtain glass hook loaded");
-}
