@@ -7,6 +7,12 @@
 #import <objc/runtime.h>
 #import "../Shared/LGGlassKit.h"
 
+// Logos does not automatically provide a compile-time declaration for the
+// private UIKit class used by %hook. Declare the known UIView base so normal
+// UIView properties (window, superview, frame, subviews, layer, etc.) compile.
+@interface SBSystemApertureContainerView : UIView
+@end
+
 static NSString * const kLog = @"/var/mobile/Documents/SBLiquidGlass_DI_Test31.log";
 
 static void LG31(NSString *s) {
