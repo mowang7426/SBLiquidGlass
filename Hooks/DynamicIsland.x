@@ -1,177 +1,89 @@
-// SBLiquidGlass Test29
-// Native Dynamic Island hierarchy probe.
-// IMPORTANT: this build does NOT add glass and does NOT modify any UI.
-// It only records the real SBSystemApertureWindow/container hierarchy so
-// the next build can target Apple's actual background layer.
+// SBLiquidGlass Test30
+// Native Dynamic Island parent/sibling probe.
+// NO UI changes. We found Test29's SBSystemApertureContainerView is 0x0.
+// Test30 therefore inspects the FULL ancestor subtree, especially siblings
+// of the container inside SBFTouchPassThroughView.
 
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
-
 #import "../Shared/LGGlassKit.h"
 
 @interface SBSystemApertureContainerView : UIView
 @end
 
-static NSString * const kLGDITest29Log =
-    @"/var/mobile/Documents/SBLiquidGlass_DI_Test29.log";
+static NSString * const kLog=@"/var/mobile/Documents/SBLiquidGlass_DI_Test30.log";
 
-static void LGDI29Write(NSString *line) {
-    NSLog(@"[SBLiquidGlass-DI-Test29] %@", line);
-
-    @try {
-        NSFileManager *fm = [NSFileManager defaultManager];
-        if (![fm fileExistsAtPath:kLGDITest29Log]) {
-            [fm createFileAtPath:kLGDITest29Log contents:nil attributes:nil];
-        }
-
-        NSFileHandle *fh =
-            [NSFileHandle fileHandleForWritingAtPath:kLGDITest29Log];
-        if (fh) {
-            NSString *s = [line stringByAppendingString:@"\n"];
-            [fh seekToEndOfFile];
-            [fh writeData:[s dataUsingEncoding:NSUTF8StringEncoding]];
-            [fh closeFile];
-        }
-    } @catch (__unused NSException *e) {
-    }
+static void W(NSString *s){
+    NSLog(@"[SBLiquidGlass-DI-Test30] %@",s);
+    @try{
+        if(![[NSFileManager defaultManager] fileExistsAtPath:kLog])
+            [[NSFileManager defaultManager] createFileAtPath:kLog contents:nil attributes:nil];
+        NSFileHandle *h=[NSFileHandle fileHandleForWritingAtPath:kLog];
+        if(h){ [h seekToEndOfFile]; [h writeData:[[s stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding]]; [h closeFile];}
+    }@catch(__unused NSException *e){}
 }
 
-static void LGDI29DumpView(UIView *view, NSInteger depth, NSInteger maxDepth) {
-    if (!view || depth > maxDepth) return;
-
-    NSString *indent = @"";
-    for (NSInteger i = 0; i < depth; i++) indent = [indent stringByAppendingString:@"  "];
-
-    CALayer *layer = view.layer;
-
-    NSString *bg = @"nil";
-    if (view.backgroundColor) {
-        CGFloat r = 0, g = 0, b = 0, a = 0;
-        [view.backgroundColor getRed:&r green:&g blue:&b alpha:&a];
-        bg = [NSString stringWithFormat:@"rgba(%.2f,%.2f,%.2f,%.2f)",
-              r, g, b, a];
-    }
-
-    NSString *layerBG = layer.backgroundColor
-        ? [NSString stringWithFormat:@"%@", layer.backgroundColor]
-        : @"nil";
-
-    LGDI29Write([NSString stringWithFormat:
-        @"%@VIEW %@ frame=%@ bounds=%@ hidden=%d alpha=%.2f bg=%@ subviews=%lu | LAYER %@ frame=%@ opacity=%.2f bg=%@ sublayers=%lu",
-        indent,
-        NSStringFromClass(view.class),
-        NSStringFromCGRect(view.frame),
-        NSStringFromCGRect(view.bounds),
-        view.hidden,
-        view.alpha,
-        bg,
-        (unsigned long)view.subviews.count,
-        NSStringFromClass(layer.class),
-        NSStringFromCGRect(layer.frame),
-        layer.opacity,
-        layerBG,
-        (unsigned long)layer.sublayers.count]);
-
-    for (UIView *sub in view.subviews) {
-        LGDI29DumpView(sub, depth + 1, maxDepth);
-    }
+static void Dump(UIView *v, NSInteger d, NSInteger max){
+    if(!v||d>max)return;
+    NSString *ind=@""; for(NSInteger i=0;i<d;i++) ind=[ind stringByAppendingString:@"  "];
+    CALayer *l=v.layer;
+    W([NSString stringWithFormat:@"%@%@ frame=%@ bounds=%@ hidden=%d alpha=%.2f bg=%@ sub=%lu | layer=%@ opacity=%.2f bg=%@ sub=%lu",
+       ind,NSStringFromClass(v.class),NSStringFromCGRect(v.frame),NSStringFromCGRect(v.bounds),
+       v.hidden,v.alpha,v.backgroundColor?(id)v.backgroundColor:@"nil",(unsigned long)v.subviews.count,
+       NSStringFromClass(l.class),l.opacity,l.backgroundColor?(id)l.backgroundColor:@"nil",(unsigned long)l.sublayers.count]);
+    for(UIView *s in v.subviews) Dump(s,d+1,max);
 }
 
-static void LGDI29DumpSuperviews(UIView *view) {
-    NSInteger level = 0;
-    UIView *v = view;
-
-    while (v && level < 8) {
-        LGDI29Write([NSString stringWithFormat:
-            @"SUPER[%ld] %@ frame=%@ bounds=%@ window=%@ subviews=%lu",
-            (long)level,
-            NSStringFromClass(v.class),
-            NSStringFromCGRect(v.frame),
-            NSStringFromCGRect(v.bounds),
-            v.window ? @"YES" : @"NO",
-            (unsigned long)v.subviews.count]);
-
-        v = v.superview;
-        level++;
-    }
-}
-
-static void LGDI29DumpLayerTree(CALayer *layer, NSInteger depth, NSInteger maxDepth) {
-    if (!layer || depth > maxDepth) return;
-
-    NSString *indent = @"";
-    for (NSInteger i = 0; i < depth; i++) indent = [indent stringByAppendingString:@"  "];
-
-    LGDI29Write([NSString stringWithFormat:
-        @"%@LAYER %@ frame=%@ bounds=%@ opacity=%.2f hidden=%d mask=%@ filters=%@ sublayers=%lu",
-        indent,
-        NSStringFromClass(layer.class),
-        NSStringFromCGRect(layer.frame),
-        NSStringFromCGRect(layer.bounds),
-        layer.opacity,
-        layer.hidden,
-        layer.mask ? NSStringFromClass(layer.mask.class) : @"nil",
-        layer.filters,
-        (unsigned long)layer.sublayers.count]);
-
-    for (CALayer *sub in layer.sublayers) {
-        LGDI29DumpLayerTree(sub, depth + 1, maxDepth);
-    }
+static void DumpLayer(CALayer *l, NSInteger d, NSInteger max){
+    if(!l||d>max)return;
+    NSString *ind=@""; for(NSInteger i=0;i<d;i++) ind=[ind stringByAppendingString:@"  "];
+    W([NSString stringWithFormat:@"%@%@ frame=%@ bounds=%@ opacity=%.2f hidden=%d bg=%@ mask=%@ filters=%@ sub=%lu",
+       ind,NSStringFromClass(l.class),NSStringFromCGRect(l.frame),NSStringFromCGRect(l.bounds),l.opacity,l.hidden,
+       l.backgroundColor?(id)l.backgroundColor:@"nil",l.mask?NSStringFromClass(l.mask.class):@"nil",
+       l.filters,(unsigned long)l.sublayers.count]);
+    for(CALayer *s in l.sublayers) DumpLayer(s,d+1,max);
 }
 
 %hook SBSystemApertureContainerView
-
-- (void)didMoveToWindow {
+- (void)didMoveToWindow{
     %orig;
+    @try{
+        if(!self.window) return;
+        static BOOL once=NO; if(once)return; once=YES;
+        [[NSFileManager defaultManager] removeItemAtPath:kLog error:nil];
+        W(@"========== TEST30 BEGIN ==========");
+        W([NSString stringWithFormat:@"TARGET %@ frame=%@ bounds=%@",NSStringFromClass(self.class),NSStringFromCGRect(self.frame),NSStringFromCGRect(self.bounds)]);
 
-    @try {
-        if (!self.window || !lgHostEnabled(@"DynamicIsland")) return;
+        UIView *v=self;
+        for(NSInteger level=0;v&&level<5;level++){
+            W([NSString stringWithFormat:@"--- ANCESTOR LEVEL %ld %@ frame=%@ bounds=%@ subviews=%lu ---",
+               (long)level,NSStringFromClass(v.class),NSStringFromCGRect(v.frame),NSStringFromCGRect(v.bounds),(unsigned long)v.subviews.count]);
+            for(UIView *s in v.subviews){
+                W([NSString stringWithFormat:@"SIBLING/PARENT-CHILD %@ frame=%@ bounds=%@ hidden=%d alpha=%.2f bg=%@ sub=%lu layer=%@ lbg=%@ filters=%@",
+                   NSStringFromClass(s.class),NSStringFromCGRect(s.frame),NSStringFromCGRect(s.bounds),s.hidden,s.alpha,
+                   s.backgroundColor?(id)s.backgroundColor:@"nil",(unsigned long)s.subviews.count,
+                   NSStringFromClass(s.layer.class),s.layer.backgroundColor?(id)s.layer.backgroundColor:@"nil",s.layer.filters]);
+            }
+            if(level==0) Dump(self,0,3);
+            v=v.superview;
+        }
 
-        static BOOL dumped = NO;
-        if (dumped) return;
-        dumped = YES;
-
-        [[NSFileManager defaultManager] removeItemAtPath:kLGDITest29Log error:nil];
-
-        LGDI29Write(@"========== TEST29 BEGIN ==========");
-        LGDI29Write([NSString stringWithFormat:
-            @"container=%@ frame=%@ bounds=%@",
-            NSStringFromClass(self.class),
-            NSStringFromCGRect(self.frame),
-            NSStringFromCGRect(self.bounds)]);
-
-        LGDI29Write(@"--- SUPERVIEW CHAIN ---");
-        LGDI29DumpSuperviews(self);
-
-        LGDI29Write(@"--- VIEW TREE (depth 5) ---");
-        LGDI29DumpView(self, 0, 5);
-
-        LGDI29Write(@"--- CONTAINER LAYER TREE (depth 5) ---");
-        LGDI29DumpLayerTree(self.layer, 0, 5);
-
-        LGDI29Write(@"--- WINDOW INFO ---");
-        UIWindow *w = self.window;
-        LGDI29Write([NSString stringWithFormat:
-            @"WINDOW %@ frame=%@ bounds=%@ alpha=%.2f hidden=%d level=%.1f root=%@",
-            NSStringFromClass(w.class),
-            NSStringFromCGRect(w.frame),
-            NSStringFromCGRect(w.bounds),
-            w.alpha,
-            w.hidden,
-            w.windowLevel,
-            w.rootViewController
-                ? NSStringFromClass(w.rootViewController.class)
-                : @"nil"]);
-
-        LGDI29Write(@"========== TEST29 END ==========");
-    } @catch (NSException *e) {
-        LGDI29Write([NSString stringWithFormat:@"EXCEPTION %@", e]);
-    }
+        UIView *p=self.superview;
+        if(p){
+            W(@"--- FULL SUBTREE OF IMMEDIATE PARENT depth 4 ---");
+            Dump(p,0,4);
+            W(@"--- FULL LAYER TREE OF IMMEDIATE PARENT depth 5 ---");
+            DumpLayer(p.layer,0,5);
+        }
+        W(@"--- WINDOW / ROOT ---");
+        UIWindow *w=self.window;
+        W([NSString stringWithFormat:@"window=%@ frame=%@ bounds=%@ root=%@",
+           NSStringFromClass(w.class),NSStringFromCGRect(w.frame),NSStringFromCGRect(w.bounds),
+           w.rootViewController?NSStringFromClass(w.rootViewController.class):@"nil"]);
+        W(@"========== TEST30 END ==========");
+    }@catch(NSException *e){W([NSString stringWithFormat:@"EXCEPTION %@",e]);}
 }
-
 %end
 
-%ctor {
-    NSLog(@"[SBLiquidGlass-DI-Test29] hierarchy probe loaded; UI unchanged");
-}
+%ctor{ NSLog(@"[SBLiquidGlass-DI-Test30] parent/sibling probe loaded; UI unchanged"); }
